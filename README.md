@@ -52,34 +52,71 @@ CREATE USER 'adm_rhua'@'localhost' IDENTIFIED BY 'troque-esta-senha';
 GRANT ALL PRIVILEGES ON adm_rhua.* TO 'adm_rhua'@'localhost';
 ```
 
-### 2. Backend
+### 2. Backend: instalação (só na primeira vez)
 
 ```bash
 cd backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
-cp .env.example .env          # ajuste DATABASE_URL e JWT_SECRET_KEY
-.venv/bin/flask db upgrade    # cria as tabelas
-.venv/bin/flask create-user   # cria o primeiro administrador
-.venv/bin/flask seed-demo     # opcional: dados de demonstração (senha rhua123)
-.venv/bin/flask run           # API em http://localhost:5000
+python3 -m venv .venv                      # cria o ambiente virtual
+source .venv/bin/activate                  # ativa o ambiente (o prompt mostra "(.venv)")
+pip install -r requirements-dev.txt        # instala as dependências
+cp .env.example .env                       # depois edite DATABASE_URL e JWT_SECRET_KEY
+flask db upgrade                           # cria as tabelas no MySQL
+flask seed-demo                            # opcional: usuários e dados de demonstração
+flask create-user                          # opcional: cria um usuário real (admin por padrão)
 ```
 
-Para gerar um `JWT_SECRET_KEY`:
+Sobre o `.env`:
 
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
+- Gere o `JWT_SECRET_KEY` com `python3 -c "import secrets; print(secrets.token_hex(32))"`.
+- Se a senha do MySQL tiver caracteres especiais (`@ : / # ? %`), codifique-a antes de colocar no `DATABASE_URL`. Por exemplo, `@` vira `%40`. Para codificar a senha inteira:
+  `python3 -c "from urllib.parse import quote; print(quote(input('Senha: '), safe=''))"`
 
-### 3. Frontend
+### 3. Frontend: instalação (só na primeira vez)
 
 ```bash
 cd frontend
 npm install
-npm run dev                   # http://localhost:5173
 ```
 
-Em desenvolvimento, o Vite encaminha as chamadas `/api` para `localhost:5000`, sem precisar configurar CORS.
+### 4. Executando o sistema
+
+O backend e o frontend rodam ao mesmo tempo, **cada um no seu terminal**. Deixe os dois abertos enquanto usa o sistema.
+
+**Terminal 1, backend (API em http://localhost:5000):**
+
+```bash
+cd ~/projects/adm-rhua/backend
+source .venv/bin/activate
+flask run
+```
+
+Para conferir se a API está no ar, abra http://localhost:5000/api/health. Deve aparecer `{"status": "ok"}`.
+
+**Terminal 2, frontend (sistema em http://localhost:5173):**
+
+```bash
+cd ~/projects/adm-rhua/frontend
+npm run dev
+```
+
+Acesse **http://localhost:5173** no navegador. Em desenvolvimento, o Vite encaminha as chamadas `/api` para o backend na porta 5000.
+
+Para parar qualquer um dos dois, use `Ctrl+C` no terminal correspondente. Os comandos `flask` precisam ser rodados **dentro de `backend/` e com o ambiente virtual ativado**. Sem ativar, use o caminho completo: `.venv/bin/flask run`.
+
+### Usuários de demonstração
+
+Criados pelo `flask seed-demo`. Todos usam a senha **`rhua123`**:
+
+| Perfil | Nome | E-mail |
+|---|---|---|
+| Administrador | Fernando (Nando) | fernando@empresa.com.br |
+| Gerente financeiro | Francine Eing | francine@empresa.com.br |
+| Operador de caixa | Jhonatan Souza | jhonatan@empresa.com.br |
+| Auditor | Diego (Consultoria) | diego@empresa.com.br |
+
+Os lançamentos de demonstração vão de **junho a agosto de 2026**, e a maior parte está em **agosto/2026**. Use o filtro de mês no topo da tela para navegar entre eles.
+
+> Esses usuários e a senha são públicos. Em produção, não rode o `seed-demo`: crie os usuários reais com `flask create-user` ou pela tela de Usuários.
 
 ## Comandos úteis
 
