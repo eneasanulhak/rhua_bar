@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --color-sand: #EED9C6;
+  --color-sand-hover: #F3E5D8;
+  --color-sand-dark: #8E765F;
+  color-scheme: light;
+}
+
+:root.dark,
+html.dark,
+body.dark {
+  color-scheme: dark;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+html.dark body {
+  background-color: #080a0f;
+  color: #f1f5f9;
+}
+
+html:not(.dark) body {
+  background-color: #f8fafc;
+  color: #1e293b;
+}
+
+body {
+  font-family: "Myriad Pro", "Segoe UI", Arial, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  transition: background-color 0.2s ease, color 0.2s ease;
+}

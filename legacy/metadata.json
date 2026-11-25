@@ -1,0 +1,6 @@
+{
+  "name": "ADM RHUA",
+  "description": "Sistema de gestão financeira e fluxo de caixa para ADM RHUA com controle por perfis de acesso, faturamento, despesas e relatórios.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
