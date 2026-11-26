@@ -1,0 +1,29 @@
+# Serviço systemd da API do ADM RHUA (Gunicorn).
+# Instalação:
+#   sudo cp deploy/adm-rhua.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now adm-rhua
+# Logs: journalctl -u adm-rhua -f
+[Unit]
+Description=ADM RHUA - API Flask (Gunicorn)
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/rhua_bar/backend
+# As portas 5000/5001 já são usadas por outros apps deste servidor.
+Environment=GUNICORN_BIND=127.0.0.1:8010
+Environment=GUNICORN_WORKERS=3
+Environment=PYTHONUNBUFFERED=1
+# DATABASE_URL, JWT_SECRET_KEY etc. vêm do .env (carregado por app/config.py).
+ExecStart=/root/rhua_bar/backend/.venv/bin/gunicorn -c gunicorn.conf.py wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

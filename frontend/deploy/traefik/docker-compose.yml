@@ -1,0 +1,37 @@
+# Rota do Traefik (container que ocupa :80/:443 neste servidor) para o nginx do host.
+# O Traefik só lê rotas de containers Docker (--providers.docker), e na v3 não
+# aceita apontar um serviço para uma URL externa via labels. Por isso este
+# container mínimo (socat) recebe o tráfego do Traefik e o repassa ao nginx do
+# host (:8081, ver deploy/nginx-rhua.conf).
+# O certificado HTTPS é emitido pelo Let's Encrypt (resolver "leresolver") assim
+# que o DNS de rhua.edasolutions.com.br apontar para este servidor.
+#
+# Subir/atualizar:  docker compose -f deploy/traefik/docker-compose.yml up -d --force-recreate
+services:
+  rhua-route:
+    image: alpine/socat:latest
+    container_name: rhua-route
+    command: ["TCP-LISTEN:8081,fork,reuseaddr", "TCP:host.docker.internal:8081"]
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - portainer_default
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: portainer_default
+      # HTTPS
+      traefik.http.routers.rhua.rule: Host(`rhua.edasolutions.com.br`)
+      traefik.http.routers.rhua.entrypoints: websecure
+      traefik.http.routers.rhua.tls.certresolver: leresolver
+      traefik.http.routers.rhua.service: rhua
+      traefik.http.services.rhua.loadbalancer.server.port: "8081"
+      # HTTP -> HTTPS (middleware definido nas labels do próprio Traefik)
+      traefik.http.routers.rhua-http.rule: Host(`rhua.edasolutions.com.br`)
+      traefik.http.routers.rhua-http.entrypoints: web
+      traefik.http.routers.rhua-http.middlewares: redirect-to-https@docker
+      traefik.http.routers.rhua-http.service: rhua
+
+networks:
+  portainer_default:
+    external: true
