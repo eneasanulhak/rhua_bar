@@ -1,3 +1,5 @@
+from datetime import date
+
 from app.models import Categoria
 
 MES = "2026-08"
@@ -62,3 +64,40 @@ def test_categoria_fora_do_resultado_e_editavel(client, login, cadastro_id):
     resp = client.put(f"/api/categorias/{cats['Impostos e Taxas']['id']}", headers=headers,
                       json={"foraDoResultado": True})
     assert resp.json["foraDoResultado"] is True
+
+
+# --- Retiradas: invisíveis para quem não tem view_retiradas -------------------------
+
+def test_retiradas_ocultas_e_bloqueadas_para_o_operador(client, login, despesa, cadastro_id):
+    admin, operador = login("admin"), login("operador")
+    retirada = cadastro_id(Categoria, "Retirada de Sócios")
+    client.post("/api/despesas", headers=admin, json=despesa(descricao="Pró-labore", categoriaId=retirada,
+                                                              dataVencimento=date.today().isoformat()))
+    client.post("/api/despesas", headers=admin, json=despesa(dataVencimento=date.today().isoformat()))
+
+    # o admin vê as duas; o operador só a operacional, na lista, no sino e nas categorias
+    assert len(client.get("/api/despesas", headers=admin).json) == 2
+    assert [d["descricao"] for d in client.get("/api/despesas", headers=operador).json] == ["Bebidas"]
+    assert len(client.get("/api/notificacoes", headers=operador).json) == 1
+    nomes = {c["nome"] for c in client.get("/api/categorias", headers=operador).json}
+    assert "Retirada de Sócios" not in nomes and "Adiantamentos" not in nomes and "Impostos e Taxas" in nomes
+
+    # e não consegue lançar uma retirada
+    resp = client.post("/api/despesas", headers=operador, json=despesa(categoriaId=retirada))
+    assert resp.status_code == 403 and "Retirada de Sócios" in resp.json["message"]
+
+
+def test_retirada_por_id_responde_404_sem_permissao(client, login, despesa, cadastro_id, monkeypatch):
+    from app.permissions import ROLE_PERMISSIONS
+    monkeypatch.setitem(ROLE_PERMISSIONS, "gerente", ROLE_PERMISSIONS["gerente"] - {"view_retiradas"})
+    gerente = login("gerente")
+    retirada = cadastro_id(Categoria, "Adiantamentos")
+    item = client.post("/api/despesas", headers=login("admin"), json=despesa(categoriaId=retirada)).json
+    comum = client.post("/api/despesas", headers=login("admin"), json=despesa()).json
+
+    assert client.put(f"/api/despesas/{item['id']}", headers=gerente, json={"valor": 1}).status_code == 404
+    assert client.patch(f"/api/despesas/{item['id']}/status", headers=gerente,
+                        json={"status": "Compensado"}).status_code == 404
+    # nem transformar uma despesa comum em retirada
+    resp = client.put(f"/api/despesas/{comum['id']}", headers=gerente, json={"categoriaId": retirada})
+    assert resp.status_code == 403

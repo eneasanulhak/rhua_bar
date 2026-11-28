@@ -1,6 +1,7 @@
 """Regras dos cadastros auxiliares usadas pelos lançamentos, pelo seed e pelos testes."""
 
 from flask import abort
+from flask_jwt_extended import current_user
 from sqlalchemy import func, select
 
 from .extensions import db
@@ -17,6 +18,7 @@ from .models import (
     Funcao,
     Setor,
 )
+from .permissions import has_permission
 
 # Formas de pagamento que, além de despesas, também valem para diárias de extras.
 FORMAS_EXTRAS = ("Dinheiro", "Pix")
@@ -81,6 +83,14 @@ def obter_ou_criar_colaborador(nome: str, **padroes) -> Colaborador:
 def validar_funcao_do_setor(funcao: Funcao | None, setor: Setor | None) -> None:
     if funcao and setor and funcao.setor_id != setor.id:
         abort(422, description=f"A função {funcao.nome} não pertence ao setor {setor.nome}.")
+
+
+def categorias_restritas():
+    """Subconsulta com as categorias fora do resultado (retiradas, adiantamentos) que o usuário
+    atual não pode ver nem lançar, ou None se ele tem `view_retiradas`."""
+    if has_permission(current_user.role, "view_retiradas"):
+        return None
+    return select(Categoria.id).where(Categoria.fora_do_resultado.is_(True))
 
 
 def resolver_cadastro(model, item_id: int, campo: str, atual_id: int | None = None, valido=lambda _: True):

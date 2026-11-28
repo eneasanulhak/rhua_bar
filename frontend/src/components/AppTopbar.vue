@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { Bell, LogOut, Moon, Sun } from 'lucide-vue-next'
+import { ref } from 'vue'
+import { Bell, KeyRound, LogOut, Moon, Sun } from 'lucide-vue-next'
+import TrocarSenhaModal from '@/components/TrocarSenhaModal.vue'
 import { ROLE_LABELS, useAuthStore } from '@/stores/auth'
 import { useNotificacoesStore } from '@/stores/resources'
 import { useUiStore } from '@/stores/ui'
@@ -7,6 +9,7 @@ import { useUiStore } from '@/stores/ui'
 const auth = useAuthStore()
 const ui = useUiStore()
 const notificacoes = useNotificacoesStore()
+const minhaConta = ref(false)
 </script>
 
 <template>
@@ -47,10 +50,18 @@ const notificacoes = useNotificacoesStore()
         <Moon v-else class="h-4 w-4" />
       </button>
 
-      <div v-if="auth.user" class="hidden text-right sm:block">
-        <p class="text-xs font-bold">{{ auth.user.name }}</p>
-        <p class="text-[10px] text-slate-500 dark:text-slate-400">{{ ROLE_LABELS[auth.user.role] }}</p>
-      </div>
+      <button
+        v-if="auth.user"
+        class="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1 text-right hover:bg-slate-100 dark:hover:bg-neutral-800"
+        title="Minha conta e troca de senha"
+        @click="minhaConta = true"
+      >
+        <span class="hidden sm:block">
+          <span class="block text-xs font-bold">{{ auth.user.name }}</span>
+          <span class="block text-[10px] text-slate-500 dark:text-slate-400">{{ ROLE_LABELS[auth.user.role] }}</span>
+        </span>
+        <KeyRound class="h-4 w-4 text-slate-400" />
+      </button>
 
       <button
         class="cursor-pointer rounded-xl p-2 text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/50"
@@ -60,5 +71,9 @@ const notificacoes = useNotificacoesStore()
         <LogOut class="h-4 w-4" />
       </button>
     </div>
+    <!-- Fora do header: o backdrop-blur dele prenderia o modal (position: fixed) à caixa do cabeçalho. -->
+    <Teleport to="body">
+      <TrocarSenhaModal v-if="minhaConta" @close="minhaConta = false" />
+    </Teleport>
   </header>
 </template>
