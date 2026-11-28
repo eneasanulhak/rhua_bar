@@ -4,14 +4,18 @@ import { api } from '@/services/api'
 import { useCrud } from './useCrud'
 import type {
   Categoria,
+  Colaborador,
   Despesa,
   DespesaInput,
   Extra,
+  ExtraInput,
   Faturamento,
   FormaPagamento,
   Fornecedor,
+  Funcao,
   Input,
   Notificacao,
+  Setor,
   TransactionStatus,
   User,
   UserInput,
@@ -52,9 +56,21 @@ export const useDespesasStore = defineStore('despesas', () => {
   }
 })
 
-export const useExtrasStore = defineStore('extras', () => ({
-  ...useCrud<Extra, Input<Extra>>('extras'),
-}))
+export const useExtrasStore = defineStore('extras', () => {
+  const crud = useCrud<Extra, ExtraInput>('extras')
+  const colaboradores = useColaboradoresStore()
+
+  /** O lançamento pode ter cadastrado um colaborador novo: recarrega a lista após alterações. */
+  function comColaboradores<A extends unknown[], R>(fn: (...args: A) => Promise<R>) {
+    return async (...args: A) => {
+      const result = await fn(...args)
+      colaboradores.fetchAll().catch(() => {})
+      return result
+    }
+  }
+
+  return { ...crud, create: comColaboradores(crud.create), update: comColaboradores(crud.update) }
+})
 
 export const useUsuariosStore = defineStore('usuarios', () => ({
   ...useCrud<User, UserInput>('usuarios'),
@@ -83,4 +99,16 @@ export const useFormasPagamentoStore = defineStore('formas-pagamento', () => ({
 
 export const useFornecedoresStore = defineStore('fornecedores', () => ({
   ...useCrud<Fornecedor, Input<Fornecedor>>('fornecedores'),
+}))
+
+export const useSetoresStore = defineStore('setores', () => ({
+  ...useCrud<Setor, Input<Setor>>('setores'),
+}))
+
+export const useFuncoesStore = defineStore('funcoes', () => ({
+  ...useCrud<Funcao, Omit<Input<Funcao>, 'setor'>>('funcoes'),
+}))
+
+export const useColaboradoresStore = defineStore('colaboradores', () => ({
+  ...useCrud<Colaborador, Omit<Input<Colaborador>, 'setor' | 'funcao'>>('colaboradores'),
 }))

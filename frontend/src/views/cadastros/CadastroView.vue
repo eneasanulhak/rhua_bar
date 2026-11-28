@@ -2,7 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { Pencil, Plus, Search, Trash2 } from 'lucide-vue-next'
 import BaseModal from '@/components/BaseModal.vue'
-import { CADASTROS, type CadastroConfig, type ItemCadastro, type TipoCadastro } from './config'
+import { brl } from '@/utils/format'
+import { CADASTROS, type CadastroConfig, type Campo, type ItemCadastro, type TipoCadastro } from './config'
 
 /** Tela genérica dos cadastros auxiliares; o tipo vem da rota. */
 const props = defineProps<{ tipo: TipoCadastro }>()
@@ -19,26 +20,62 @@ watch(
   () => {
     busca.value = ''
     store.value.fetchAll()
+    // Cadastros usados nos campos de seleção (ex.: setores na tela de funções).
+    for (const c of config.value.campos) c.opcoes?.().fetchAll()
   },
   { immediate: true },
 )
+
+/** Texto do campo na listagem e na busca. */
+function exibicao(item: ItemCadastro, c: Campo): string {
+  const valor = item[c.exibir ?? c.key]
+  if (c.tipo === 'marcacao') return valor ? 'Sim' : 'Não'
+  if (c.tipo === 'dinheiro') return Number(valor) ? brl(Number(valor)) : '-'
+  return valor ? String(valor) : '-'
+}
 
 const filtrados = computed(() => {
   const termo = busca.value.toLowerCase()
   return store.value.items.filter(
     (i) =>
       (mostrarInativos.value || i.ativo) &&
-      config.value.campos.some((c) => c.tipo !== 'marcacao' && String(i[c.key] ?? '').toLowerCase().includes(termo)),
+      config.value.campos.some((c) => c.tipo !== 'marcacao' && exibicao(i, c).toLowerCase().includes(termo)),
   )
 })
 const qtdInativos = computed(() => store.value.items.filter((i) => !i.ativo).length)
 
 // --- Formulário -----------------------------------------------------------
 
+const VAZIO: Record<Campo['tipo'], (c: Campo) => unknown> = {
+  texto: () => '',
+  email: () => '',
+  textarea: () => '',
+  marcacao: (c) => c.key === 'usaDespesas',
+  dinheiro: () => 0,
+  selecao: () => null,
+}
+
 function vazio(): Record<string, unknown> {
   const valores: Record<string, unknown> = { ativo: true }
-  for (const c of config.value.campos) valores[c.key] = c.tipo === 'marcacao' ? c.key === 'usaDespesas' : ''
+  for (const c of config.value.campos) valores[c.key] = VAZIO[c.tipo](c)
   return valores
+}
+
+/** Opções de um campo de seleção: ativas e permitidas pelo filtro, mais a já escolhida. */
+function opcoesDe(c: Campo): ItemCadastro[] {
+  return (c.opcoes?.().items ?? []).filter(
+    (o) => o.id === form[c.key] || (o.ativo && (!c.filtrar || c.filtrar(o, form))),
+  )
+}
+
+/** Ao trocar uma seleção, limpa as que dependem dela e deixaram de ser válidas (ex.: função de outro setor). */
+function ajustarDependentes() {
+  for (const c of config.value.campos) {
+    if (c.filtrar && form[c.key] != null) {
+      const atual = c.opcoes?.().items.find((o) => o.id === form[c.key])
+      if (!atual || !c.filtrar(atual, form)) form[c.key] = null
+    }
+  }
 }
 
 const modalAberto = ref(false)
@@ -144,8 +181,7 @@ async function excluir(item: ItemCadastro) {
               :class="{ 'opacity-60': !item.ativo }"
             >
               <td v-for="c in colunas" :key="c.key" class="p-3.5" :class="{ 'font-bold text-slate-900 dark:text-slate-100': c.key === 'nome' }">
-                <template v-if="c.tipo === 'marcacao'">{{ item[c.key] ? 'Sim' : 'Não' }}</template>
-                <template v-else>{{ item[c.key] || '-' }}</template>
+                {{ exibicao(item, c) }}
               </td>
               <td class="p-3.5">
                 <span
@@ -201,6 +237,28 @@ async function excluir(item: ItemCadastro) {
           <div v-else>
             <label class="label" :for="`cad-${c.key}`">{{ c.rotulo }}</label>
             <textarea v-if="c.tipo === 'textarea'" :id="`cad-${c.key}`" v-model="form[c.key] as string" rows="2" class="input" />
+            <select
+              v-else-if="c.tipo === 'selecao'"
+              :id="`cad-${c.key}`"
+              v-model="form[c.key]"
+              :required="c.obrigatorio"
+              class="input"
+              @change="ajustarDependentes"
+            >
+              <option :value="null" :disabled="c.obrigatorio">{{ c.obrigatorio ? 'Selecione…' : '(nenhum)' }}</option>
+              <option v-for="o in opcoesDe(c)" :key="o.id" :value="o.id">
+                {{ o.nome }}{{ o.ativo ? '' : ' (inativo)' }}
+              </option>
+            </select>
+            <input
+              v-else-if="c.tipo === 'dinheiro'"
+              :id="`cad-${c.key}`"
+              v-model.number="form[c.key]"
+              type="number"
+              step="0.01"
+              min="0"
+              class="input"
+            />
             <input
               v-else
               :id="`cad-${c.key}`"
@@ -211,6 +269,7 @@ async function excluir(item: ItemCadastro) {
               :placeholder="c.placeholder"
               class="input"
             />
+            <p v-if="c.dica" class="mt-1 text-[10px] text-slate-400">{{ c.dica }}</p>
           </div>
         </template>
         <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold select-none">

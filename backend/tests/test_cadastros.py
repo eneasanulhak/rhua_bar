@@ -1,6 +1,6 @@
-from app.models import Categoria, FormaPagamento
+from app.models import Categoria, FormaPagamento, Funcao, Setor
 
-CADASTROS = ("categorias", "formas-pagamento", "fornecedores")
+CADASTROS = ("categorias", "formas-pagamento", "fornecedores", "setores", "funcoes", "colaboradores")
 
 
 def test_listar_liberado_para_quem_ve_despesas(client, login):
@@ -78,3 +78,73 @@ def test_cadastro_inativo_ou_de_outro_uso(client, login, despesa, cadastro_id):
     pix = cadastro_id(FormaPagamento, "Pix")
     client.put(f"/api/formas-pagamento/{pix}", headers=admin, json={"usaDespesas": False})
     assert client.post("/api/despesas", headers=admin, json=despesa(formaPagamentoId=pix)).status_code == 422
+
+
+# --- Cadastros de extras -------------------------------------------------------
+
+def test_funcao_unica_por_setor(client, login, cadastro_id):
+    headers = login("admin")
+    bar, cozinha = cadastro_id(Setor, "BAR"), cadastro_id(Setor, "COZINHA")
+    resp = client.post("/api/funcoes", headers=headers, json={"nome": "Auxiliar", "setorId": bar})
+    assert resp.status_code == 201 and resp.json["setor"] == "BAR"
+    # mesmo nome em outro setor pode; no mesmo setor, não
+    assert client.post("/api/funcoes", headers=headers, json={"nome": "auxiliar", "setorId": cozinha}).status_code == 201
+    assert client.post("/api/funcoes", headers=headers, json={"nome": "AUXILIAR", "setorId": bar}).status_code == 409
+    assert client.post("/api/funcoes", headers=headers, json={"nome": "X", "setorId": 9999}).status_code == 422
+    # mover para um setor onde o nome já existe também é recusado
+    resp = client.put(f"/api/funcoes/{resp.json['id']}", headers=headers, json={"setorId": cozinha})
+    assert resp.status_code == 409
+
+
+def test_colaborador_valida_funcao_do_setor(client, login, cadastro_id):
+    headers = login("admin")
+    salao, bar = cadastro_id(Setor, "SALÃO"), cadastro_id(Setor, "BAR")
+    lider = cadastro_id(Funcao, "LÍDER")
+    resp = client.post("/api/colaboradores", headers=headers,
+                       json={"nome": "Ana", "setorId": salao, "funcaoId": lider, "valorDiaria": 250})
+    assert resp.status_code == 201
+    assert resp.json["funcao"] == "LÍDER" and resp.json["valorDiaria"] == 250.0
+
+    resp = client.put(f"/api/colaboradores/{resp.json['id']}", headers=headers, json={"setorId": bar})
+    assert resp.status_code == 422 and "não pertence" in resp.json["message"]
+    # só o nome é obrigatório
+    assert client.post("/api/colaboradores", headers=headers, json={"nome": "Beto"}).status_code == 201
+
+
+def test_colaborador_criado_no_lancamento(client, login, extra, cadastro_id):
+    headers = login("operador")
+    resp = client.post("/api/extras", headers=headers, json=extra(nome="Marlon", valorAReceber=310,
+                       setorId=cadastro_id(Setor, "BAR"), funcaoId=cadastro_id(Funcao, "BAR")))
+    assert resp.status_code == 201 and resp.json["nome"] == "Marlon" and resp.json["setor"] == "BAR"
+
+    # o primeiro lançamento define os padrões do colaborador...
+    colab = next(c for c in client.get("/api/colaboradores", headers=headers).json if c["nome"] == "Marlon")
+    assert (colab["setor"], colab["funcao"], colab["valorDiaria"]) == ("BAR", "BAR", 310.0)
+
+    # ...e os seguintes reaproveitam o cadastro sem alterá-lo
+    resp = client.post("/api/extras", headers=headers, json=extra(nome=" MARLON ", valorAReceber=200))
+    assert resp.json["colaboradorId"] == colab["id"]
+    colab = next(c for c in client.get("/api/colaboradores", headers=headers).json if c["nome"] == "Marlon")
+    assert colab["valorDiaria"] == 310.0
+
+
+def test_extra_valida_setor_funcao_e_forma(client, login, extra, cadastro_id):
+    headers = login("admin")
+    resp = client.post("/api/extras", headers=headers, json=extra(funcaoId=cadastro_id(Funcao, "CUMIM")))
+    assert resp.status_code == 422 and "não pertence" in resp.json["message"]
+
+    boleto = cadastro_id(FormaPagamento, "Boleto")  # vale só para despesas
+    assert client.post("/api/extras", headers=headers, json=extra(formaPagamentoId=boleto)).status_code == 422
+
+    item = client.post("/api/extras", headers=headers, json=extra()).json
+    # editar só a função precisa respeitar o setor já gravado
+    resp = client.put(f"/api/extras/{item['id']}", headers=headers, json={"funcaoId": cadastro_id(Funcao, "BAR")})
+    assert resp.status_code == 422
+
+
+def test_cadastros_de_extras_em_uso(client, login, extra):
+    headers = login("admin")
+    item = client.post("/api/extras", headers=headers, json=extra()).json
+    for recurso, chave in (("setores", "setorId"), ("funcoes", "funcaoId"), ("colaboradores", "colaboradorId"),
+                           ("formas-pagamento", "formaPagamentoId")):
+        assert client.delete(f"/api/{recurso}/{item[chave]}", headers=headers).status_code == 409, recurso

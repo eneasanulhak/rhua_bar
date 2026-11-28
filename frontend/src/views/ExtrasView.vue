@@ -1,44 +1,50 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Pencil, Plus, Search, Trash2, Users } from 'lucide-vue-next'
 import BaseModal from '@/components/BaseModal.vue'
 import { useAuthStore } from '@/stores/auth'
-import { useExtrasStore } from '@/stores/resources'
+import {
+  useColaboradoresStore,
+  useExtrasStore,
+  useFormasPagamentoStore,
+  useFuncoesStore,
+  useSetoresStore,
+} from '@/stores/resources'
 import { useUiStore } from '@/stores/ui'
-import { FUNCOES_EXTRA, SETORES, type Extra, type Input } from '@/types'
+import type { Extra, ExtraInput } from '@/types'
 import { brl, dateBR, today } from '@/utils/format'
-
-type Setor = Extra['setor']
-type Funcao = Extra['funcao']
 
 const auth = useAuthStore()
 const ui = useUiStore()
 const store = useExtrasStore()
+const setores = useSetoresStore()
+const funcoes = useFuncoesStore()
+const formas = useFormasPagamentoStore()
+const colaboradores = useColaboradoresStore()
 
 watch(() => ui.mes, (mes) => store.fetchAll(mes), { immediate: true })
-
-/** Funções que cada setor pode ter: o salão tem líder e cumim; os demais, a função de mesmo nome. */
-function funcoesDoSetor(setor: Setor): readonly Funcao[] {
-  return setor === 'SALÃO' ? ['SALÃO', 'LÍDER', 'CUMIM'] : FUNCOES_EXTRA.filter((f) => f === setor)
-}
+onMounted(() => Promise.all([setores.fetchAll(), funcoes.fetchAll(), formas.fetchAll(), colaboradores.fetchAll()]))
 
 // --- Listagem -------------------------------------------------------------
 
-const setorSelecionado = ref<Setor | 'TODOS'>('TODOS')
+const setorSelecionado = ref<number | 'TODOS'>('TODOS')
 const busca = ref('')
 
-const cardsSetor = computed(() =>
-  (['TODOS', ...SETORES] as const).map((setor) => {
-    const registros = setor === 'TODOS' ? store.items : store.items.filter((e) => e.setor === setor)
-    return { setor, qtd: registros.length, total: registros.reduce((soma, e) => soma + e.valorAReceber, 0) }
-  }),
-)
+/** Um card por setor ativo (e por inativo que ainda tenha diárias no período). */
+const cardsSetor = computed(() => {
+  const usados = new Set(store.items.map((e) => e.setorId))
+  const lista = setores.items.filter((s) => s.ativo || usados.has(s.id))
+  return [{ id: 'TODOS' as const, nome: 'TODOS' }, ...lista].map((setor) => {
+    const registros = setor.id === 'TODOS' ? store.items : store.items.filter((e) => e.setorId === setor.id)
+    return { ...setor, qtd: registros.length, total: registros.reduce((soma, e) => soma + e.valorAReceber, 0) }
+  })
+})
 
 const filtrados = computed(() => {
   const termo = busca.value.toLowerCase()
   return store.items.filter(
     (e) =>
-      (setorSelecionado.value === 'TODOS' || e.setor === setorSelecionado.value) &&
+      (setorSelecionado.value === 'TODOS' || e.setorId === setorSelecionado.value) &&
       [e.nome, e.funcao, e.setor].some((campo) => campo.toLowerCase().includes(termo)),
   )
 })
@@ -52,13 +58,20 @@ const totalPendente = computed(() =>
 
 // --- Formulário -----------------------------------------------------------
 
-const vazio = (): Input<Extra> => ({
+/** Setor, função e forma ficam vazios (null) até serem escolhidos ou vindos do colaborador. */
+type FormExtra = Omit<ExtraInput, 'setorId' | 'funcaoId' | 'formaPagamentoId'> & {
+  setorId: number | null
+  funcaoId: number | null
+  formaPagamentoId: number | null
+}
+
+const vazio = (): FormExtra => ({
   data: today(),
   nome: '',
-  setor: 'SALÃO',
-  funcao: 'SALÃO',
-  valorAReceber: 150,
-  formaPagamento: 'Dinheiro',
+  setorId: null,
+  funcaoId: null,
+  valorAReceber: 0,
+  formaPagamentoId: formas.items.find((f) => f.ativo && f.usaExtras && f.nome === 'Dinheiro')?.id ?? null,
   status: 'PAGO',
   observacao: '',
 })
@@ -69,8 +82,35 @@ const form = reactive(vazio())
 const salvando = ref(false)
 const erroForm = ref('')
 
+// Nos selects aparecem só os itens ativos (e válidos), mais o já usado pela diária em edição.
+const opcoesSetor = computed(() => setores.items.filter((s) => s.ativo || s.id === form.setorId))
+const opcoesFuncao = computed(() =>
+  funcoes.items.filter((f) => f.id === form.funcaoId || (f.ativo && f.setorId === form.setorId)),
+)
+const opcoesForma = computed(() =>
+  formas.items.filter((f) => (f.ativo && f.usaExtras) || f.id === form.formaPagamentoId),
+)
+const colaboradoresAtivos = computed(() => colaboradores.items.filter((c) => c.ativo))
+
+const colaboradorEscolhido = computed(() => {
+  const nome = form.nome.trim().toLowerCase()
+  return nome ? colaboradores.items.find((c) => c.nome.toLowerCase() === nome) : undefined
+})
+const colaboradorNovo = computed(() => !!form.nome.trim() && !colaboradorEscolhido.value)
+
+/** Ao escolher um colaborador num lançamento novo, preenche setor, função e diária com os padrões dele. */
+watch(colaboradorEscolhido, (colab) => {
+  if (!colab || editandoId.value) return
+  if (colab.setorId) form.setorId = colab.setorId
+  if (colab.funcaoId) form.funcaoId = colab.funcaoId
+  if (colab.valorDiaria) form.valorAReceber = colab.valorDiaria
+})
+
 function trocarSetor() {
-  if (!funcoesDoSetor(form.setor).includes(form.funcao)) form.funcao = funcoesDoSetor(form.setor)[0]!
+  if (!funcoes.items.some((f) => f.id === form.funcaoId && f.setorId === form.setorId)) {
+    const doSetor = opcoesFuncao.value.filter((f) => f.setorId === form.setorId)
+    form.funcaoId = doSetor.length === 1 ? doSetor[0]!.id : null
+  }
 }
 
 function abrir(item?: Extra) {
@@ -81,11 +121,17 @@ function abrir(item?: Extra) {
 }
 
 async function salvar() {
+  const { setorId, funcaoId, formaPagamentoId } = form
+  if (!setorId || !funcaoId || !formaPagamentoId) {
+    erroForm.value = 'Escolha o setor, a função e a forma de pagamento.'
+    return
+  }
   salvando.value = true
   erroForm.value = ''
   try {
-    if (editandoId.value) await store.update(editandoId.value, { ...form })
-    else await store.create({ ...form })
+    const payload: ExtraInput = { ...form, setorId, funcaoId, formaPagamentoId }
+    if (editandoId.value) await store.update(editandoId.value, payload)
+    else await store.create(payload)
     modalAberto.value = false
   } catch (e) {
     erroForm.value = (e as Error).message
@@ -139,20 +185,20 @@ async function excluir(item: Extra) {
     <div class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
       <button
         v-for="c in cardsSetor"
-        :key="c.setor"
+        :key="c.id"
         type="button"
         class="cursor-pointer rounded-2xl border p-3 text-left transition-all"
         :class="
-          setorSelecionado === c.setor
+          setorSelecionado === c.id
             ? 'border-sand-dark bg-sand text-slate-950 shadow-md'
             : 'border-slate-200 bg-white text-slate-700 hover:border-sand-dark dark:border-slate-800 dark:bg-panel dark:text-slate-200'
         "
-        :aria-pressed="setorSelecionado === c.setor"
-        @click="setorSelecionado = c.setor"
+        :aria-pressed="setorSelecionado === c.id"
+        @click="setorSelecionado = c.id"
       >
-        <div class="text-[10px] font-black tracking-wider">{{ c.setor }}</div>
+        <div class="truncate text-[10px] font-black tracking-wider">{{ c.nome }}</div>
         <div class="mt-1 text-lg font-black">{{ c.qtd }}</div>
-        <div class="text-[10px]" :class="setorSelecionado === c.setor ? 'text-slate-700' : 'text-slate-500'">
+        <div class="text-[10px]" :class="setorSelecionado === c.id ? 'text-slate-700' : 'text-slate-500'">
           {{ brl(c.total) }}
         </div>
       </button>
@@ -291,6 +337,26 @@ async function excluir(item: Extra) {
       @close="modalAberto = false"
     >
       <form class="space-y-4" @submit.prevent="salvar">
+        <div>
+          <label class="label" for="ext-nome">Colaborador</label>
+          <input
+            id="ext-nome"
+            v-model="form.nome"
+            type="text"
+            required
+            maxlength="120"
+            list="ext-colaboradores"
+            autocomplete="off"
+            placeholder="Digite para buscar ou cadastrar"
+            class="input"
+          />
+          <datalist id="ext-colaboradores">
+            <option v-for="c in colaboradoresAtivos" :key="c.id" :value="c.nome" />
+          </datalist>
+          <p v-if="colaboradorNovo" class="mt-1 text-[10px] font-semibold text-sand-dark dark:text-sand">
+            Novo colaborador: será cadastrado ao salvar, com este setor, função e valor como padrão.
+          </p>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="label" for="ext-data">Data do trabalho</label>
@@ -309,38 +375,34 @@ async function excluir(item: Extra) {
             />
           </div>
         </div>
-        <div>
-          <label class="label" for="ext-nome">Nome do colaborador</label>
-          <input
-            id="ext-nome"
-            v-model="form.nome"
-            type="text"
-            required
-            maxlength="120"
-            placeholder="ex: Felippe, Vitor Miranda"
-            class="input"
-          />
-        </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="label" for="ext-setor">Setor</label>
-            <select id="ext-setor" v-model="form.setor" class="input" @change="trocarSetor">
-              <option v-for="s in SETORES" :key="s" :value="s">{{ s }}</option>
+            <select id="ext-setor" v-model="form.setorId" required class="input" @change="trocarSetor">
+              <option :value="null" disabled>Selecione…</option>
+              <option v-for="s in opcoesSetor" :key="s.id" :value="s.id">
+                {{ s.nome }}{{ s.ativo ? '' : ' (inativo)' }}
+              </option>
             </select>
           </div>
           <div>
             <label class="label" for="ext-funcao">Função</label>
-            <select id="ext-funcao" v-model="form.funcao" class="input">
-              <option v-for="f in funcoesDoSetor(form.setor)" :key="f" :value="f">{{ f }}</option>
+            <select id="ext-funcao" v-model="form.funcaoId" required class="input" :disabled="!form.setorId">
+              <option :value="null" disabled>{{ form.setorId ? 'Selecione…' : 'Escolha o setor' }}</option>
+              <option v-for="f in opcoesFuncao" :key="f.id" :value="f.id">
+                {{ f.nome }}{{ f.ativo ? '' : ' (inativa)' }}
+              </option>
             </select>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="label" for="ext-forma">Forma de pagamento</label>
-            <select id="ext-forma" v-model="form.formaPagamento" class="input">
-              <option value="Dinheiro">Dinheiro</option>
-              <option value="Pix">Pix</option>
+            <select id="ext-forma" v-model="form.formaPagamentoId" required class="input">
+              <option :value="null" disabled>Selecione…</option>
+              <option v-for="f in opcoesForma" :key="f.id" :value="f.id">
+                {{ f.nome }}{{ f.ativo && f.usaExtras ? '' : ' (inativa)' }}
+              </option>
             </select>
           </div>
           <div>

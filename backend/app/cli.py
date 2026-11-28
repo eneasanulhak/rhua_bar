@@ -7,9 +7,15 @@ import click
 from flask import Flask
 from sqlalchemy import func, select
 
-from .cadastros import buscar_por_nome, garantir_cadastros_padrao, obter_ou_criar_fornecedor
+from .cadastros import (
+    buscar_funcao,
+    buscar_por_nome,
+    garantir_cadastros_padrao,
+    obter_ou_criar_colaborador,
+    obter_ou_criar_fornecedor,
+)
 from .extensions import db
-from .models import ROLES, Categoria, Despesa, Extra, Faturamento, FormaPagamento, User
+from .models import FUNCOES_EXTRA, ROLES, Categoria, Despesa, Extra, Faturamento, FormaPagamento, Setor, User
 
 DEMO_USERS = [
     ("Fernando (Nando)", "fernando@empresa.com.br", "admin"),
@@ -17,9 +23,6 @@ DEMO_USERS = [
     ("Jhonatan Souza", "jhonatan@empresa.com.br", "operador"),
     ("Diego (Consultoria)", "diego@empresa.com.br", "auditor"),
 ]
-
-# Mesmo mapeamento da antiga migração 002_setores_extras.sql.
-SETOR_POR_FUNCAO = {"LÍDER": "SALÃO", "CUMIM": "SALÃO"}
 
 
 def register_cli(app: Flask) -> None:
@@ -79,11 +82,14 @@ def register_cli(app: Flask) -> None:
             ))
         admin = users_by_name["Fernando (Nando)"]
         for e in data["extras"]:
+            setor = buscar_por_nome(Setor, e.get("setor") or FUNCOES_EXTRA[e["funcao"]])
+            funcao = buscar_funcao(e["funcao"], setor.id)
+            valor = Decimal(str(e["valorAReceber"]))
             db.session.add(Extra(
-                data=date.fromisoformat(e["data"]), nome=e["nome"],
-                setor=e.get("setor") or SETOR_POR_FUNCAO.get(e["funcao"], e["funcao"]),
-                funcao=e["funcao"], valor=Decimal(str(e["valorAReceber"])),
-                forma_pagamento=e["formaPagamento"], status=e["status"],
+                data=date.fromisoformat(e["data"]),
+                colaborador=obter_ou_criar_colaborador(e["nome"], setor=setor, funcao=funcao, valor_diaria=valor),
+                setor=setor, funcao=funcao, valor=valor,
+                forma_pagamento=buscar_por_nome(FormaPagamento, e["formaPagamento"]), status=e["status"],
                 observacao=e.get("observacao"), registrado_por=admin,
             ))
         db.session.commit()
