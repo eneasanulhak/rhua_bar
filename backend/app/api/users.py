@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 
 from ..extensions import db
 from ..models import ROLES, User
-from ..permissions import require_permission
+from ..permissions import ROLE_PERMISSIONS, require_permission
 from ..validation import Field, parse_payload
 
 bp = Blueprint("usuarios", __name__)
@@ -41,6 +41,13 @@ def _validate_password(password) -> str:
 def list_users():
     users = db.session.scalars(select(User).order_by(User.name))
     return [u.to_dict() for u in users]
+
+
+@bp.get("/permissoes")
+@require_permission("manage_users")
+def list_role_permissions():
+    """Matriz perfil -> permissões, direto de ROLE_PERMISSIONS (a tela de usuários a exibe)."""
+    return {role: sorted(perms) for role, perms in ROLE_PERMISSIONS.items()}
 
 
 @bp.post("")

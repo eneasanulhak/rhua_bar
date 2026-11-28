@@ -64,7 +64,7 @@ const router = createRouter({
         {
           path: 'usuarios',
           name: 'usuarios',
-          component: () => import('@/views/EmConstrucaoView.vue'),
+          component: () => import('@/views/UsuariosView.vue'),
           meta: { permission: 'manage_users', title: 'Usuários & Permissões' },
         },
         // Cadastros auxiliares: uma rota por tipo, todas na mesma tela genérica.
