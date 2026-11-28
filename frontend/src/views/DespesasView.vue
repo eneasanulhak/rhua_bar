@@ -1,18 +1,27 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { AlertTriangle, CheckCircle2, Clock, Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-vue-next'
 import BaseModal from '@/components/BaseModal.vue'
 import { useAuthStore } from '@/stores/auth'
-import { useDespesasStore } from '@/stores/resources'
+import {
+  useCategoriasStore,
+  useDespesasStore,
+  useFormasPagamentoStore,
+  useFornecedoresStore,
+} from '@/stores/resources'
 import { useUiStore } from '@/stores/ui'
-import { EXPENSE_CATEGORIES, PAYMENT_METHODS, type Despesa, type Input, type TransactionStatus } from '@/types'
+import type { Despesa, DespesaInput, TransactionStatus } from '@/types'
 import { brl, dateBR, today } from '@/utils/format'
 
 const auth = useAuthStore()
 const ui = useUiStore()
 const store = useDespesasStore()
+const categorias = useCategoriasStore()
+const formas = useFormasPagamentoStore()
+const fornecedores = useFornecedoresStore()
 
 watch(() => ui.mes, (mes) => store.fetchAll(mes), { immediate: true })
+onMounted(() => Promise.all([categorias.fetchAll(), formas.fetchAll(), fornecedores.fetchAll()]))
 
 const STATUS: { value: TransactionStatus; label: string }[] = [
   { value: 'Pendente', label: 'Pendente' },
@@ -36,11 +45,20 @@ const filtrados = computed(() => {
 
 const totalFiltrado = computed(() => filtrados.value.reduce((soma, d) => soma + d.valor, 0))
 
-const vazio = (): Input<Despesa> => ({
+/** Categoria e forma ficam vazias (null) até o usuário escolher. */
+type FormDespesa = Omit<DespesaInput, 'categoriaId' | 'formaPagamentoId'> & {
+  categoriaId: number | null
+  formaPagamentoId: number | null
+}
+
+const idPorNome = (lista: { id: number; nome: string; ativo: boolean }[], nome: string) =>
+  lista.find((i) => i.ativo && i.nome === nome)?.id ?? null
+
+const vazio = (): FormDespesa => ({
   descricao: '',
   fornecedorOuFavorecido: '',
-  categoria: 'Compras Bar e Salão',
-  formaPagamento: 'Boleto',
+  categoriaId: idPorNome(categorias.items, 'Compras Bar e Salão'),
+  formaPagamentoId: idPorNome(formas.items, 'Boleto'),
   valor: 0,
   dataEmissao: today(),
   dataVencimento: today(),
@@ -49,6 +67,17 @@ const vazio = (): Input<Despesa> => ({
   numeroNF: '',
   parcela: '',
   observacao: '',
+})
+
+// Nos selects aparecem só os itens ativos, mais o já usado pela despesa em edição.
+const opcoesCategoria = computed(() => categorias.items.filter((c) => c.ativo || c.id === form.categoriaId))
+const opcoesForma = computed(() =>
+  formas.items.filter((f) => (f.ativo && f.usaDespesas) || f.id === form.formaPagamentoId),
+)
+const fornecedoresAtivos = computed(() => fornecedores.items.filter((f) => f.ativo))
+const fornecedorNovo = computed(() => {
+  const nome = form.fornecedorOuFavorecido.trim().toLowerCase()
+  return !!nome && !fornecedores.items.some((f) => f.nome.toLowerCase() === nome)
 })
 
 const modalAberto = ref(false)
@@ -65,11 +94,17 @@ function abrir(item?: Despesa) {
 }
 
 async function salvar() {
+  const { categoriaId, formaPagamentoId } = form
+  if (!categoriaId || !formaPagamentoId) {
+    erroForm.value = 'Escolha a categoria e a forma de pagamento.'
+    return
+  }
   salvando.value = true
   erroForm.value = ''
   try {
-    if (editandoId.value) await store.update(editandoId.value, { ...form })
-    else await store.create({ ...form })
+    const payload: DespesaInput = { ...form, categoriaId, formaPagamentoId }
+    if (editandoId.value) await store.update(editandoId.value, payload)
+    else await store.create(payload)
     modalAberto.value = false
   } catch (e) {
     erroForm.value = (e as Error).message
@@ -126,7 +161,7 @@ async function excluir(item: Despesa) {
       </div>
       <select v-model="filtroCategoria" class="input cursor-pointer" aria-label="Filtrar por categoria">
         <option value="">Todas as Categorias</option>
-        <option v-for="cat in EXPENSE_CATEGORIES" :key="cat" :value="cat">{{ cat }}</option>
+        <option v-for="c in categorias.items" :key="c.id" :value="c.nome">{{ c.nome }}</option>
       </select>
       <select v-model="filtroStatus" class="input cursor-pointer" aria-label="Filtrar por status">
         <option value="">Todos os Status</option>
@@ -265,9 +300,17 @@ async function excluir(item: Despesa) {
               type="text"
               required
               maxlength="180"
-              placeholder="ex: Zé Distribuidora, Ambev, Celesc"
+              list="desp-fornecedores"
+              autocomplete="off"
+              placeholder="Digite para buscar ou cadastrar"
               class="input"
             />
+            <datalist id="desp-fornecedores">
+              <option v-for="f in fornecedoresAtivos" :key="f.id" :value="f.nome" />
+            </datalist>
+            <p v-if="fornecedorNovo" class="mt-1 text-[10px] font-semibold text-sand-dark dark:text-sand">
+              Novo fornecedor: será cadastrado ao salvar.
+            </p>
           </div>
           <div>
             <label class="label" for="desp-valor">Valor (R$)</label>
@@ -297,14 +340,20 @@ async function excluir(item: Despesa) {
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="label" for="desp-categoria">Categoria</label>
-            <select id="desp-categoria" v-model="form.categoria" class="input">
-              <option v-for="cat in EXPENSE_CATEGORIES" :key="cat" :value="cat">{{ cat }}</option>
+            <select id="desp-categoria" v-model="form.categoriaId" required class="input">
+              <option :value="null" disabled>Selecione…</option>
+              <option v-for="c in opcoesCategoria" :key="c.id" :value="c.id">
+                {{ c.nome }}{{ c.ativo ? '' : ' (inativa)' }}
+              </option>
             </select>
           </div>
           <div>
             <label class="label" for="desp-forma">Forma de pagamento</label>
-            <select id="desp-forma" v-model="form.formaPagamento" class="input">
-              <option v-for="p in PAYMENT_METHODS" :key="p" :value="p">{{ p }}</option>
+            <select id="desp-forma" v-model="form.formaPagamentoId" required class="input">
+              <option :value="null" disabled>Selecione…</option>
+              <option v-for="f in opcoesForma" :key="f.id" :value="f.id">
+                {{ f.nome }}{{ f.ativo && f.usaDespesas ? '' : ' (inativa)' }}
+              </option>
             </select>
           </div>
         </div>

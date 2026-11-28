@@ -33,7 +33,7 @@ def list_notificacoes():
     items = []
     for d in db.session.scalars(query):
         days = (d.data_vencimento - today).days
-        valor, quem, venc = _brl(d.valor), d.fornecedor, _br_date(d.data_vencimento)
+        valor, quem, venc = _brl(d.valor), d.fornecedor.nome, _br_date(d.data_vencimento)
         if days < 0:
             kind, title = "overdue", "Boleto atrasado"
             message = f'O pagamento para "{quem}" de {valor} venceu há {-days} dia(s) em {venc}.'

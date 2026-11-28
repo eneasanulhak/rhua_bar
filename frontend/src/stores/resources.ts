@@ -3,9 +3,13 @@ import { defineStore } from 'pinia'
 import { api } from '@/services/api'
 import { useCrud } from './useCrud'
 import type {
+  Categoria,
   Despesa,
+  DespesaInput,
   Extra,
   Faturamento,
+  FormaPagamento,
+  Fornecedor,
   Input,
   Notificacao,
   TransactionStatus,
@@ -18,14 +22,19 @@ export const useFaturamentosStore = defineStore('faturamentos', () => ({
 }))
 
 export const useDespesasStore = defineStore('despesas', () => {
-  const crud = useCrud<Despesa, Input<Despesa>>('despesas')
+  const crud = useCrud<Despesa, DespesaInput>('despesas')
   const notificacoes = useNotificacoesStore()
+  const fornecedores = useFornecedoresStore()
 
-  /** Os alertas de vencimento (sino e badge do menu) dependem das despesas: recarrega após cada alteração. */
+  /**
+   * Após cada alteração recarrega o que depende das despesas: os alertas de vencimento
+   * (sino e badge do menu) e os fornecedores, que podem ter sido cadastrados no lançamento.
+   */
   function comAlertas<A extends unknown[], R>(fn: (...args: A) => Promise<R>) {
     return async (...args: A) => {
       const result = await fn(...args)
       notificacoes.fetchAll().catch(() => {})
+      fornecedores.fetchAll().catch(() => {})
       return result
     }
   }
@@ -60,3 +69,18 @@ export const useNotificacoesStore = defineStore('notificacoes', () => {
 
   return { items, fetchAll }
 })
+
+// --- Cadastros auxiliares --------------------------------------------------
+// As listas trazem também os inativos; os formulários de lançamento filtram por `ativo`.
+
+export const useCategoriasStore = defineStore('categorias', () => ({
+  ...useCrud<Categoria, Input<Categoria>>('categorias'),
+}))
+
+export const useFormasPagamentoStore = defineStore('formas-pagamento', () => ({
+  ...useCrud<FormaPagamento, Input<FormaPagamento>>('formas-pagamento'),
+}))
+
+export const useFornecedoresStore = defineStore('fornecedores', () => ({
+  ...useCrud<Fornecedor, Input<Fornecedor>>('fornecedores'),
+}))

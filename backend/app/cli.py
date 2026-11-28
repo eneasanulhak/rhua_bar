@@ -7,8 +7,9 @@ import click
 from flask import Flask
 from sqlalchemy import func, select
 
+from .cadastros import buscar_por_nome, garantir_cadastros_padrao, obter_ou_criar_fornecedor
 from .extensions import db
-from .models import ROLES, Despesa, Extra, Faturamento, User
+from .models import ROLES, Categoria, Despesa, Extra, Faturamento, FormaPagamento, User
 
 DEMO_USERS = [
     ("Fernando (Nando)", "fernando@empresa.com.br", "admin"),
@@ -54,6 +55,7 @@ def register_cli(app: Flask) -> None:
                 db.session.add(user)
             users_by_name[name] = user
 
+        garantir_cadastros_padrao()
         data = json.loads((Path(__file__).parent / "seed_data.json").read_text(encoding="utf-8"))
         for f in data["faturamentos"]:
             db.session.add(Faturamento(
@@ -66,8 +68,9 @@ def register_cli(app: Flask) -> None:
             ))
         for d in data["despesas"]:
             db.session.add(Despesa(
-                descricao=d["descricao"], fornecedor=d["fornecedorOuFavorecido"], categoria=d["categoria"],
-                forma_pagamento=d["formaPagamento"], valor=Decimal(str(d["valor"])),
+                descricao=d["descricao"], fornecedor=obter_ou_criar_fornecedor(d["fornecedorOuFavorecido"]),
+                categoria=buscar_por_nome(Categoria, d["categoria"]),
+                forma_pagamento=buscar_por_nome(FormaPagamento, d["formaPagamento"]), valor=Decimal(str(d["valor"])),
                 data_emissao=date.fromisoformat(d["dataEmissao"]),
                 data_vencimento=date.fromisoformat(d["dataVencimento"]),
                 data_pagamento=date.fromisoformat(d["dataPagamento"]) if d.get("dataPagamento") else None,

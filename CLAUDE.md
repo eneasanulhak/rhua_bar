@@ -29,6 +29,7 @@ Frontend (dentro de `frontend/`):
 - Valores monetários são `Numeric(12,2)` / `Decimal` no servidor e `number` no JSON.
 - `registradoPor` é derivado do usuário do JWT (FK `registrado_por_id`), nunca vem do cliente.
 - **Permissões**: `ROLE_PERMISSIONS` em `permissions.py` é a fonte da verdade; endpoints usam `@require_permission(...)` (que já inclui `jwt_required`). O login e `/api/auth/me` devolvem a lista de permissões do usuário, e o frontend só a usa para esconder UI. Extras reaproveitam as permissões de despesas (herança do sistema antigo).
+- **Cadastros auxiliares** (categorias, formas de pagamento, fornecedores…): CRUD gerado por `cadastro_blueprint` em `api/cadastros.py`; listar exige `view_despesas`, alterar exige `manage_cadastros` (só admin). Item em uso não é excluído (409), só inativado; lançamentos aceitam item inativo apenas se já o usavam (`resolver_cadastro` em `app/cadastros.py`). Despesas referenciam categoria/forma por id, e o fornecedor vem pelo nome e é criado automaticamente se não existir. No frontend, todos usam a tela genérica `views/cadastros/CadastroView.vue`, configurada em `views/cadastros/config.ts` (que também gera as rotas e o menu Cadastros).
 - `GET /api/notificacoes` calcula no servidor as despesas não pagas atrasadas / vencendo hoje / nos próximos 7 dias.
 - Listagens aceitam `?mes=AAAA-MM` (despesas filtram por `data_vencimento`).
 

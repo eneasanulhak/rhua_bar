@@ -1,9 +1,10 @@
 import pytest
 
 from app import create_app
+from app.cadastros import garantir_cadastros_padrao
 from app.config import TestConfig
 from app.extensions import db
-from app.models import User
+from app.models import Categoria, FormaPagamento, User
 
 
 @pytest.fixture
@@ -15,6 +16,7 @@ def app():
             user = User(name=role.title(), email=f"{role}@teste.com", role=role)
             user.set_password("senha123")
             db.session.add(user)
+        garantir_cadastros_padrao()
         db.session.commit()
         yield app
         db.session.remove()
@@ -36,3 +38,29 @@ def login(client):
         return {"Authorization": f"Bearer {resp.json['accessToken']}"}
 
     return _login
+
+
+@pytest.fixture
+def cadastro_id(app):
+    """cadastro_id(Categoria, "Impostos e Taxas") -> id do cadastro padrão."""
+
+    def _id(model, nome: str) -> int:
+        return db.session.scalar(db.select(model.id).where(model.nome == nome))
+
+    return _id
+
+
+@pytest.fixture
+def despesa(cadastro_id):
+    """Payload válido de despesa; campos podem ser sobrescritos: despesa(valor=10)."""
+
+    def _payload(**overrides) -> dict:
+        return {
+            "descricao": "Bebidas", "fornecedorOuFavorecido": "Zé Distribuidora",
+            "categoriaId": cadastro_id(Categoria, "Compras Bar e Salão"),
+            "formaPagamentoId": cadastro_id(FormaPagamento, "Boleto"),
+            "valor": 2421.56, "dataEmissao": "2026-08-06", "dataVencimento": "2026-08-26", "status": "Pendente",
+            **overrides,
+        }
+
+    return _payload

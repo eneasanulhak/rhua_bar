@@ -15,7 +15,7 @@ from flask import abort
 @dataclass
 class Field:
     attr: str
-    kind: str = "str"  # str | money | date | bool
+    kind: str = "str"  # str | int | money | date | bool
     required: bool = False
     choices: tuple[str, ...] | None = None
     max_len: int | None = None
@@ -40,6 +40,10 @@ def _convert(name: str, field: Field, value: Any) -> Any:
             return date.fromisoformat(str(value))
         except ValueError:
             abort(422, description=f"Data inválida em {name} (use AAAA-MM-DD).")
+    if field.kind == "int":
+        if isinstance(value, bool) or not isinstance(value, int):
+            abort(422, description=f"Valor inválido em {name}.")
+        return value
     if field.kind == "bool":
         if not isinstance(value, bool):
             abort(422, description=f"Valor inválido em {name}.")
