@@ -33,18 +33,6 @@ export interface UserInput extends Omit<User, 'id'> {
 
 export type TransactionStatus = 'Compensado' | 'Pendente' | 'Atrasado'
 
-export const SETORES = ['COZINHA', 'SEGURANÇA', 'BAR', 'SALÃO', 'RECEPÇÃO', 'LIMPEZA'] as const
-export const FUNCOES_EXTRA = [
-  'COZINHA',
-  'BAR',
-  'SALÃO',
-  'LÍDER',
-  'SEGURANÇA',
-  'RECEPÇÃO',
-  'LIMPEZA',
-  'CUMIM',
-] as const
-
 export interface Faturamento {
   id: number
   data: string // AAAA-MM-DD
@@ -105,14 +93,47 @@ export interface Despesa {
   registradoPor: string
 }
 
+export interface Setor {
+  id: number
+  nome: string
+  ativo: boolean
+}
+
+export interface Funcao {
+  id: number
+  nome: string
+  setorId: number
+  setor: string
+  ativo: boolean
+}
+
+/** Setor, função e valor são padrões que preenchem o lançamento da diária. */
+export interface Colaborador {
+  id: number
+  nome: string
+  setorId: number | null
+  setor: string | null
+  funcaoId: number | null
+  funcao: string | null
+  valorDiaria: number
+  telefone: string | null
+  chavePix: string | null
+  observacao: string | null
+  ativo: boolean
+}
+
 export interface Extra {
   id: number
   data: string
+  colaboradorId: number
   nome: string
-  setor: (typeof SETORES)[number]
-  funcao: (typeof FUNCOES_EXTRA)[number]
+  setorId: number
+  setor: string
+  funcaoId: number
+  funcao: string
   valorAReceber: number
-  formaPagamento: 'Dinheiro' | 'Pix'
+  formaPagamentoId: number
+  formaPagamento: string
   status: 'PAGO' | 'PENDENTE'
   observacao: string | null
   registradoPor: string
@@ -135,3 +156,6 @@ export type Input<T> = Omit<T, 'id' | 'registradoPor'>
  * e é cadastrado automaticamente se ainda não existir.
  */
 export type DespesaInput = Omit<Input<Despesa>, 'fornecedorId' | 'categoria' | 'formaPagamento'>
+
+/** Diária enviada à API: o colaborador vai pelo nome (`nome`) e é cadastrado se não existir. */
+export type ExtraInput = Omit<Input<Extra>, 'colaboradorId' | 'setor' | 'funcao' | 'formaPagamento'>

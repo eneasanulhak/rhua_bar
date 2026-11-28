@@ -1,6 +1,13 @@
 import type { Component } from 'vue'
-import { CreditCard, Tags, Truck } from 'lucide-vue-next'
-import { useCategoriasStore, useFormasPagamentoStore, useFornecedoresStore } from '@/stores/resources'
+import { Briefcase, CreditCard, LayoutGrid, Tags, Truck, UserRound } from 'lucide-vue-next'
+import {
+  useCategoriasStore,
+  useColaboradoresStore,
+  useFormasPagamentoStore,
+  useFornecedoresStore,
+  useFuncoesStore,
+  useSetoresStore,
+} from '@/stores/resources'
 
 /** Item mínimo de qualquer cadastro auxiliar. */
 export interface ItemCadastro {
@@ -24,12 +31,19 @@ export interface CadastroStore {
 export interface Campo {
   key: string
   rotulo: string
-  tipo: 'texto' | 'email' | 'textarea' | 'marcacao'
+  tipo: 'texto' | 'email' | 'textarea' | 'marcacao' | 'dinheiro' | 'selecao'
   obrigatorio?: boolean
   max?: number
   placeholder?: string
+  dica?: string
   /** Mostrar como coluna na listagem. */
   coluna?: boolean
+  /** Seleção: cadastro de onde vêm as opções (id gravado em `key`). */
+  opcoes?: () => CadastroStore
+  /** Seleção: campo do item com o nome a exibir na listagem (ex.: `setor` para `setorId`). */
+  exibir?: string
+  /** Seleção: restringe as opções conforme o formulário (ex.: funções do setor escolhido). */
+  filtrar?: (opcao: ItemCadastro, form: Record<string, unknown>) => boolean
 }
 
 export interface CadastroConfig {
@@ -81,6 +95,54 @@ export const CADASTROS = {
       { key: 'documento', rotulo: 'CNPJ / CPF', tipo: 'texto', max: 20, coluna: true },
       { key: 'telefone', rotulo: 'Telefone', tipo: 'texto', max: 30, coluna: true },
       { key: 'email', rotulo: 'E-mail', tipo: 'email', max: 180 },
+      { key: 'observacao', rotulo: 'Observação', tipo: 'textarea' },
+    ],
+  },
+  setores: {
+    titulo: 'Setores',
+    subtitulo: 'Áreas de trabalho da equipe extra; agrupam as diárias na tela de Extras',
+    singular: 'Setor',
+    novo: 'Novo Setor',
+    icon: LayoutGrid,
+    store: () => useSetoresStore() as unknown as CadastroStore,
+    campos: [{ ...NOME, max: 60 }],
+  },
+  funcoes: {
+    titulo: 'Funções',
+    subtitulo: 'Cada função pertence a um setor; no lançamento a lista é filtrada pelo setor escolhido',
+    singular: 'Função',
+    novo: 'Nova Função',
+    icon: Briefcase,
+    store: () => useFuncoesStore() as unknown as CadastroStore,
+    campos: [
+      { ...NOME, max: 60 },
+      {
+        key: 'setorId', rotulo: 'Setor', tipo: 'selecao', obrigatorio: true, coluna: true,
+        opcoes: () => useSetoresStore() as unknown as CadastroStore, exibir: 'setor',
+      },
+    ],
+  },
+  colaboradores: {
+    titulo: 'Colaboradores',
+    subtitulo: 'Equipe extra. Setor, função e diária preenchem o lançamento; novos nomes são cadastrados ao lançar',
+    singular: 'Colaborador',
+    novo: 'Novo Colaborador',
+    icon: UserRound,
+    store: () => useColaboradoresStore() as unknown as CadastroStore,
+    campos: [
+      { ...NOME, max: 120 },
+      {
+        key: 'setorId', rotulo: 'Setor padrão', tipo: 'selecao', coluna: true,
+        opcoes: () => useSetoresStore() as unknown as CadastroStore, exibir: 'setor',
+      },
+      {
+        key: 'funcaoId', rotulo: 'Função padrão', tipo: 'selecao', coluna: true,
+        opcoes: () => useFuncoesStore() as unknown as CadastroStore, exibir: 'funcao',
+        filtrar: (funcao, form) => funcao.setorId === form.setorId,
+      },
+      { key: 'valorDiaria', rotulo: 'Diária padrão (R$)', tipo: 'dinheiro', coluna: true, dica: '0 = sem valor padrão' },
+      { key: 'telefone', rotulo: 'Telefone', tipo: 'texto', max: 30, coluna: true },
+      { key: 'chavePix', rotulo: 'Chave Pix', tipo: 'texto', max: 120 },
       { key: 'observacao', rotulo: 'Observação', tipo: 'textarea' },
     ],
   },

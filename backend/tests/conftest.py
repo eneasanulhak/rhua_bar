@@ -4,7 +4,7 @@ from app import create_app
 from app.cadastros import garantir_cadastros_padrao
 from app.config import TestConfig
 from app.extensions import db
-from app.models import Categoria, FormaPagamento, User
+from app.models import Categoria, FormaPagamento, Funcao, Setor, User
 
 
 @pytest.fixture
@@ -60,6 +60,21 @@ def despesa(cadastro_id):
             "categoriaId": cadastro_id(Categoria, "Compras Bar e Salão"),
             "formaPagamentoId": cadastro_id(FormaPagamento, "Boleto"),
             "valor": 2421.56, "dataEmissao": "2026-08-06", "dataVencimento": "2026-08-26", "status": "Pendente",
+            **overrides,
+        }
+
+    return _payload
+
+
+@pytest.fixture
+def extra(cadastro_id):
+    """Payload válido de diária de extra; campos podem ser sobrescritos: extra(nome="Ana")."""
+
+    def _payload(**overrides) -> dict:
+        return {
+            "data": "2026-08-08", "nome": "Jussara",
+            "setorId": cadastro_id(Setor, "COZINHA"), "funcaoId": cadastro_id(Funcao, "COZINHA"),
+            "valorAReceber": 230, "formaPagamentoId": cadastro_id(FormaPagamento, "Dinheiro"), "status": "PAGO",
             **overrides,
         }
 

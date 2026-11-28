@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Enum, ForeignKey, Numeric, String, Text, func
+from sqlalchemy import Enum, ForeignKey, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -27,8 +27,11 @@ EXPENSE_CATEGORIES = (
 PAYMENT_METHODS = ("Dinheiro", "Crédito", "Débito", "Pix", "Voucher", "Boleto", "DDA", "Débito em conta", "Sicoob")
 TRANSACTION_STATUS = ("Compensado", "Pendente", "Atrasado")
 SETORES = ("COZINHA", "SEGURANÇA", "BAR", "SALÃO", "RECEPÇÃO", "LIMPEZA")
-FUNCOES_EXTRA = ("COZINHA", "BAR", "SALÃO", "LÍDER", "SEGURANÇA", "RECEPÇÃO", "LIMPEZA", "CUMIM")
-EXTRA_PAYMENT_METHODS = ("Dinheiro", "Pix")
+# Função -> setor ao qual pertence.
+FUNCOES_EXTRA = {
+    "COZINHA": "COZINHA", "BAR": "BAR", "SALÃO": "SALÃO", "LÍDER": "SALÃO", "CUMIM": "SALÃO",
+    "SEGURANÇA": "SEGURANÇA", "RECEPÇÃO": "RECEPÇÃO", "LIMPEZA": "LIMPEZA",
+}
 EXTRA_STATUS = ("PAGO", "PENDENTE")
 
 Money = Numeric(12, 2)
@@ -211,30 +214,94 @@ class Despesa(RegistradoPorMixin, db.Model):
         }
 
 
+class Setor(CadastroMixin, db.Model):
+    __tablename__ = "setores"
+
+    nome: Mapped[str] = mapped_column(String(60), unique=True)
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "nome": self.nome, "ativo": self.ativo}
+
+
+class Funcao(CadastroMixin, db.Model):
+    """Função de extra; pertence a um setor (o nome só se repete em setores diferentes)."""
+
+    __tablename__ = "funcoes"
+    __table_args__ = (UniqueConstraint("setor_id", "nome", name="uq_funcoes_setor_nome"),)
+
+    nome: Mapped[str] = mapped_column(String(60))
+    setor_id: Mapped[int] = mapped_column(ForeignKey("setores.id"), index=True)
+
+    setor: Mapped[Setor] = relationship(lazy="joined")
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "nome": self.nome, "setorId": self.setor_id, "setor": self.setor.nome, "ativo": self.ativo}
+
+
+class Colaborador(CadastroMixin, db.Model):
+    """Colaborador extra. Setor, função e valor da diária são padrões para agilizar o lançamento."""
+
+    __tablename__ = "colaboradores"
+
+    nome: Mapped[str] = mapped_column(String(120), unique=True)
+    setor_id: Mapped[int | None] = mapped_column(ForeignKey("setores.id"))
+    funcao_id: Mapped[int | None] = mapped_column(ForeignKey("funcoes.id"))
+    valor_diaria: Mapped[Decimal] = mapped_column(Money, default=0)
+    telefone: Mapped[str | None] = mapped_column(String(30))
+    chave_pix: Mapped[str | None] = mapped_column(String(120))
+    observacao: Mapped[str | None] = mapped_column(Text)
+
+    setor: Mapped[Setor | None] = relationship(lazy="joined")
+    funcao: Mapped[Funcao | None] = relationship(lazy="joined")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "setorId": self.setor_id,
+            "setor": self.setor.nome if self.setor else None,
+            "funcaoId": self.funcao_id,
+            "funcao": self.funcao.nome if self.funcao else None,
+            "valorDiaria": _money(self.valor_diaria),
+            "telefone": self.telefone,
+            "chavePix": self.chave_pix,
+            "observacao": self.observacao,
+            "ativo": self.ativo,
+        }
+
+
 class Extra(RegistradoPorMixin, db.Model):
     __tablename__ = "extras"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     data: Mapped[date] = mapped_column(index=True)
-    nome: Mapped[str] = mapped_column(String(120))
-    setor: Mapped[str] = mapped_column(Enum(*SETORES, name="setor"))
-    funcao: Mapped[str] = mapped_column(Enum(*FUNCOES_EXTRA, name="funcao_extra"))
+    colaborador_id: Mapped[int] = mapped_column(ForeignKey("colaboradores.id"), index=True)
+    setor_id: Mapped[int] = mapped_column(ForeignKey("setores.id"), index=True)
+    funcao_id: Mapped[int] = mapped_column(ForeignKey("funcoes.id"), index=True)
     valor: Mapped[Decimal] = mapped_column(Money)
-    forma_pagamento: Mapped[str] = mapped_column(Enum(*EXTRA_PAYMENT_METHODS, name="extra_payment_method"))
+    forma_pagamento_id: Mapped[int] = mapped_column(ForeignKey("formas_pagamento.id"), index=True)
     status: Mapped[str] = mapped_column(Enum(*EXTRA_STATUS, name="extra_status"), default="PENDENTE")
     observacao: Mapped[str | None] = mapped_column(Text)
 
     registrado_por: Mapped[User | None] = relationship()
+    colaborador: Mapped[Colaborador] = relationship(lazy="joined")
+    setor: Mapped[Setor] = relationship(lazy="joined")
+    funcao: Mapped[Funcao] = relationship(lazy="joined")
+    forma_pagamento: Mapped[FormaPagamento] = relationship(lazy="joined")
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "data": _iso(self.data),
-            "nome": self.nome,
-            "setor": self.setor,
-            "funcao": self.funcao,
+            "colaboradorId": self.colaborador_id,
+            "nome": self.colaborador.nome,
+            "setorId": self.setor_id,
+            "setor": self.setor.nome,
+            "funcaoId": self.funcao_id,
+            "funcao": self.funcao.nome,
             "valorAReceber": _money(self.valor),
-            "formaPagamento": self.forma_pagamento,
+            "formaPagamentoId": self.forma_pagamento_id,
+            "formaPagamento": self.forma_pagamento.nome,
             "status": self.status,
             "observacao": self.observacao,
             "registradoPor": self.registrado_por_nome,

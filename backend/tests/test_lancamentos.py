@@ -1,10 +1,6 @@
 from datetime import date, timedelta
 
 FATURAMENTO = {"data": "2026-08-01", "dinheiro": 100.5, "credito": "200.10", "pix": 0, "diferencaCaixa": -1.25}
-EXTRA = {
-    "data": "2026-08-08", "nome": "Jussara", "setor": "COZINHA", "funcao": "COZINHA",
-    "valorAReceber": 230, "formaPagamento": "Dinheiro", "status": "PAGO",
-}
 
 
 def test_faturamento_crud_and_month_filter(client, login):
@@ -60,10 +56,10 @@ def test_despesa_status_toggle(client, login, despesa):
     assert resp.json["dataPagamento"] is None
 
 
-def test_extras_use_despesas_permissions(client, login):
-    resp = client.post("/api/extras", headers=login("operador"), json=EXTRA)
+def test_extras_use_despesas_permissions(client, login, extra):
+    resp = client.post("/api/extras", headers=login("operador"), json=extra())
     assert resp.status_code == 201 and resp.json["valorAReceber"] == 230.0
-    assert client.post("/api/extras", headers=login("auditor"), json=EXTRA).status_code == 403
+    assert client.post("/api/extras", headers=login("auditor"), json=extra()).status_code == 403
     assert client.delete(f"/api/extras/{resp.json['id']}", headers=login("gerente")).status_code == 403
     assert client.delete(f"/api/extras/{resp.json['id']}", headers=login("admin")).status_code == 204
 
