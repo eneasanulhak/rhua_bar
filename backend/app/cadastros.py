@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 
 from .extensions import db
 from .models import (
+    CATEGORIAS_FORA_DO_RESULTADO,
     EXPENSE_CATEGORIES,
     FUNCOES_EXTRA,
     PAYMENT_METHODS,
@@ -30,7 +31,7 @@ def garantir_cadastros_padrao() -> None:
     """Cria os cadastros iniciais que ainda não existirem (não faz commit)."""
     for nome in EXPENSE_CATEGORIES:
         if not buscar_por_nome(Categoria, nome):
-            db.session.add(Categoria(nome=nome))
+            db.session.add(Categoria(nome=nome, fora_do_resultado=nome in CATEGORIAS_FORA_DO_RESULTADO))
     for nome in PAYMENT_METHODS:
         if not buscar_por_nome(FormaPagamento, nome):
             db.session.add(FormaPagamento(nome=nome, usa_despesas=True, usa_extras=nome in FORMAS_EXTRAS))

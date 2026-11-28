@@ -58,7 +58,7 @@ const router = createRouter({
         {
           path: 'relatorios',
           name: 'relatorios',
-          component: () => import('@/views/EmConstrucaoView.vue'),
+          component: () => import('@/views/RelatoriosView.vue'),
           meta: { permission: 'view_dashboard', title: 'Relatórios & Exportação' },
         },
         {

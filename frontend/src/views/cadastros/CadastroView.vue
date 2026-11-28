@@ -230,10 +230,13 @@ async function excluir(item: ItemCadastro) {
     >
       <form class="space-y-4" @submit.prevent="salvar">
         <template v-for="c in config.campos" :key="c.key">
-          <label v-if="c.tipo === 'marcacao'" class="flex cursor-pointer items-center gap-2 text-xs font-semibold select-none">
-            <input v-model="form[c.key]" type="checkbox" class="h-4 w-4 cursor-pointer accent-black dark:accent-sand" />
-            {{ c.rotulo }}
-          </label>
+          <div v-if="c.tipo === 'marcacao'">
+            <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold select-none">
+              <input v-model="form[c.key]" type="checkbox" class="h-4 w-4 cursor-pointer accent-black dark:accent-sand" />
+              {{ c.rotulo }}
+            </label>
+            <p v-if="c.dica" class="mt-1 ml-6 text-[10px] text-slate-400">{{ c.dica }}</p>
+          </div>
           <div v-else>
             <label class="label" :for="`cad-${c.key}`">{{ c.rotulo }}</label>
             <textarea v-if="c.tipo === 'textarea'" :id="`cad-${c.key}`" v-model="form[c.key] as string" rows="2" class="input" />

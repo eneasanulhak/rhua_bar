@@ -52,6 +52,8 @@ export interface Faturamento {
 export interface Categoria {
   id: number
   nome: string
+  /** Retiradas, adiantamentos…: o DRE as mostra abaixo do resultado operacional. */
+  foraDoResultado: boolean
   ativo: boolean
 }
 
@@ -159,3 +161,30 @@ export type DespesaInput = Omit<Input<Despesa>, 'fornecedorId' | 'categoria' | '
 
 /** Diária enviada à API: o colaborador vai pelo nome (`nome`) e é cadastrado se não existir. */
 export type ExtraInput = Omit<Input<Extra>, 'colaboradorId' | 'setor' | 'funcao' | 'formaPagamento'>
+
+// --- DRE (GET /api/relatorios/dre) -------------------------------------------
+
+export interface DreGrupo {
+  total: number
+  pago: number
+  categorias: { categoria: string; total: number; pago: number }[]
+}
+
+export interface Dre {
+  periodo: string
+  faturamento: {
+    total: number
+    porMeio: Record<'dinheiro' | 'credito' | 'debito' | 'pix' | 'voucher' | 'sicoob', number>
+    diferencaCaixa: number
+  }
+  despesas: DreGrupo
+  extras: { total: number; pago: number }
+  /** Faturamento − despesas operacionais − extras (tudo que vence no período, pago ou não). */
+  resultadoOperacional: number
+  /** null para quem não tem `view_retiradas`. */
+  retiradas: DreGrupo | null
+  resultadoFinal: number | null
+  /** Faturamento − o que já foi pago. */
+  saldoCaixa: number
+  aPagar: number
+}
