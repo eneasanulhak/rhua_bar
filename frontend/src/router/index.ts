@@ -45,7 +45,7 @@ const router = createRouter({
         {
           path: 'boletos',
           name: 'boletos',
-          component: () => import('@/views/EmConstrucaoView.vue'),
+          component: () => import('@/views/BoletosView.vue'),
           meta: { permission: 'view_despesas', title: 'Boletos & Vencimentos' },
         },
         {

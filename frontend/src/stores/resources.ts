@@ -19,12 +19,28 @@ export const useFaturamentosStore = defineStore('faturamentos', () => ({
 
 export const useDespesasStore = defineStore('despesas', () => {
   const crud = useCrud<Despesa, Input<Despesa>>('despesas')
+  const notificacoes = useNotificacoesStore()
+
+  /** Os alertas de vencimento (sino e badge do menu) dependem das despesas: recarrega após cada alteração. */
+  function comAlertas<A extends unknown[], R>(fn: (...args: A) => Promise<R>) {
+    return async (...args: A) => {
+      const result = await fn(...args)
+      notificacoes.fetchAll().catch(() => {})
+      return result
+    }
+  }
 
   async function setStatus(id: number, status: TransactionStatus, dataPagamento?: string) {
     return crud.replace(await api.patch<Despesa>(`/despesas/${id}/status`, { status, dataPagamento }))
   }
 
-  return { ...crud, setStatus }
+  return {
+    ...crud,
+    create: comAlertas(crud.create),
+    update: comAlertas(crud.update),
+    remove: comAlertas(crud.remove),
+    setStatus: comAlertas(setStatus),
+  }
 })
 
 export const useExtrasStore = defineStore('extras', () => ({
