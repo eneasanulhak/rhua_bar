@@ -39,7 +39,7 @@ const router = createRouter({
         {
           path: 'despesas',
           name: 'despesas',
-          component: () => import('@/views/EmConstrucaoView.vue'),
+          component: () => import('@/views/DespesasView.vue'),
           meta: { permission: 'view_despesas', title: 'Despesas & Compras' },
         },
         {
