@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ADM RHUA é o sistema de gestão financeira do RHUA Bar (faturamento diário, despesas/boletos, diárias de extras, relatórios, usuários). Domínio, UI, mensagens de erro e nomes de campos estão em português — mantenha esse padrão.
 
-O projeto está **em migração**: o app React antigo (só frontend, dados em `localStorage`) foi movido para `legacy/` e serve apenas de referência visual/funcional. O sistema novo é `backend/` (Flask) + `frontend/` (Vue). Telas ainda não portadas apontam para `frontend/src/views/EmConstrucaoView.vue` no router; ao portar uma, use a tela equivalente em `legacy/src/components/` como referência e `FaturamentoView.vue` como padrão de implementação.
+O sistema é `backend/` (Flask) + `frontend/` (Vue). Todas as telas do app React antigo (só frontend, dados em `localStorage`) já foram portadas; ele continua em `legacy/` apenas como referência histórica e não faz parte do build. Para uma tela nova, use `FaturamentoView.vue` como padrão de implementação (ou `views/cadastros/` se for um cadastro auxiliar).
 
 ## Comandos
 
