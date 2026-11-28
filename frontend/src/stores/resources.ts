@@ -15,6 +15,8 @@ import type {
   Funcao,
   Input,
   Notificacao,
+  Permission,
+  Role,
   Setor,
   TransactionStatus,
   User,
@@ -72,9 +74,16 @@ export const useExtrasStore = defineStore('extras', () => {
   return { ...crud, create: comColaboradores(crud.create), update: comColaboradores(crud.update) }
 })
 
-export const useUsuariosStore = defineStore('usuarios', () => ({
-  ...useCrud<User, UserInput>('usuarios'),
-}))
+export const useUsuariosStore = defineStore('usuarios', () => {
+  /** Permissões de cada perfil, vindas de ROLE_PERMISSIONS no servidor. */
+  const permissoesPorPerfil = ref<Partial<Record<Role, Permission[]>>>({})
+
+  async function fetchPermissoes() {
+    permissoesPorPerfil.value = await api.get<Record<Role, Permission[]>>('/usuarios/permissoes')
+  }
+
+  return { ...useCrud<User, UserInput>('usuarios'), permissoesPorPerfil, fetchPermissoes }
+})
 
 export const useNotificacoesStore = defineStore('notificacoes', () => {
   const items = ref<Notificacao[]>([])

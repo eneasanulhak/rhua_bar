@@ -30,3 +30,11 @@ def test_admin_cannot_demote_or_delete_self(client, login):
     me = client.get("/api/auth/me", headers=headers).json["user"]
     assert client.put(f"/api/usuarios/{me['id']}", headers=headers, json={"role": "auditor"}).status_code == 422
     assert client.delete(f"/api/usuarios/{me['id']}", headers=headers).status_code == 422
+
+
+def test_matriz_de_permissoes(client, login):
+    assert client.get("/api/usuarios/permissoes", headers=login("gerente")).status_code == 403
+    matriz = client.get("/api/usuarios/permissoes", headers=login("admin")).json
+    assert set(matriz) == {"admin", "gerente", "operador", "auditor"}
+    assert "manage_cadastros" in matriz["admin"] and "manage_cadastros" not in matriz["gerente"]
+    assert "edit_faturamento" not in matriz["operador"]
