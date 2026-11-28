@@ -1,13 +1,13 @@
 from datetime import date
 
-from flask import Blueprint, request
+from flask import Blueprint, abort, request
 from flask_jwt_extended import current_user
 from sqlalchemy import select
 
-from ..cadastros import obter_ou_criar_fornecedor, resolver_cadastro
+from ..cadastros import categorias_restritas, obter_ou_criar_fornecedor, resolver_cadastro
 from ..extensions import db
 from ..models import TRANSACTION_STATUS, Categoria, Despesa, FormaPagamento
-from ..permissions import require_permission
+from ..permissions import has_permission, require_permission
 from ..validation import Field, month_bounds, parse_payload
 
 bp = Blueprint("despesas", __name__)
@@ -48,7 +48,25 @@ def _resolver_cadastros(fields: dict, atual: Despesa | None = None) -> dict:
             FormaPagamento, fields.pop("forma_pagamento_id"), "formaPagamentoId",
             atual and atual.forma_pagamento_id, valido=lambda f: f.usa_despesas,
         )
+    categoria = fields.get("categoria")
+    if categoria and categoria.fora_do_resultado and not has_permission(current_user.role, "view_retiradas"):
+        abort(403, description=f"Você não tem permissão para lançar despesas de {categoria.nome}.")
     return fields
+
+
+def _visiveis(query):
+    """Esconde retiradas/adiantamentos de quem não tem `view_retiradas`."""
+    if (restritas := categorias_restritas()) is not None:
+        query = query.where(Despesa.categoria_id.not_in(restritas))
+    return query
+
+
+def _carregar(item_id: int) -> Despesa:
+    """Despesa invisível para o usuário responde 404, como se não existisse."""
+    item = db.session.scalar(_visiveis(select(Despesa).where(Despesa.id == item_id)))
+    if not item:
+        abort(404, description="Despesa não encontrada.")
+    return item
 
 
 def _apply_status_rules(item: Despesa) -> None:
@@ -62,7 +80,7 @@ def _apply_status_rules(item: Despesa) -> None:
 @bp.get("")
 @require_permission("view_despesas")
 def list_despesas():
-    query = select(Despesa).order_by(Despesa.data_vencimento.desc(), Despesa.id.desc())
+    query = _visiveis(select(Despesa).order_by(Despesa.data_vencimento.desc(), Despesa.id.desc()))
     if bounds := month_bounds(request.args.get("mes")):
         query = query.where(Despesa.data_vencimento >= bounds[0], Despesa.data_vencimento < bounds[1])
     return [d.to_dict() for d in db.session.scalars(query)]
@@ -82,7 +100,7 @@ def create_despesa():
 @bp.put("/<int:item_id>")
 @require_permission("edit_despesas")
 def update_despesa(item_id: int):
-    item = db.get_or_404(Despesa, item_id, description="Despesa não encontrada.")
+    item = _carregar(item_id)
     fields = _resolver_cadastros(parse_payload(request.get_json(silent=True), SPEC, partial=True), item)
     for attr, value in fields.items():
         setattr(item, attr, value)
@@ -94,7 +112,7 @@ def update_despesa(item_id: int):
 @bp.patch("/<int:item_id>/status")
 @require_permission("compensar_despesas")
 def update_status(item_id: int):
-    item = db.get_or_404(Despesa, item_id, description="Despesa não encontrada.")
+    item = _carregar(item_id)
     fields = parse_payload(request.get_json(silent=True), STATUS_SPEC)
     item.status = fields["status"]
     item.data_pagamento = fields["data_pagamento"]
@@ -106,7 +124,7 @@ def update_status(item_id: int):
 @bp.delete("/<int:item_id>")
 @require_permission("delete_despesas")
 def delete_despesa(item_id: int):
-    item = db.get_or_404(Despesa, item_id, description="Despesa não encontrada.")
+    item = _carregar(item_id)
     db.session.delete(item)
     db.session.commit()
     return "", 204

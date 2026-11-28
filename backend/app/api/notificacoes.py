@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from flask import Blueprint
 from sqlalchemy import select
 
+from ..cadastros import categorias_restritas
 from ..extensions import db
 from ..models import Despesa
 from ..permissions import require_permission
@@ -29,6 +30,8 @@ def list_notificacoes():
         .where(Despesa.status != "Compensado", Despesa.data_vencimento <= today + timedelta(days=7))
         .order_by(Despesa.data_vencimento)
     )
+    if (restritas := categorias_restritas()) is not None:
+        query = query.where(Despesa.categoria_id.not_in(restritas))
 
     items = []
     for d in db.session.scalars(query):

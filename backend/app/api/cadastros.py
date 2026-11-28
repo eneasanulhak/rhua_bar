@@ -9,7 +9,7 @@ from collections.abc import Callable
 from flask import Blueprint, abort, request
 from sqlalchemy import exists, func, select
 
-from ..cadastros import resolver_cadastro, validar_funcao_do_setor
+from ..cadastros import categorias_restritas, resolver_cadastro, validar_funcao_do_setor
 from ..extensions import db
 from ..models import Categoria, Colaborador, Despesa, Extra, FormaPagamento, Fornecedor, Funcao, Setor
 from ..permissions import require_permission
@@ -23,11 +23,13 @@ def cadastro_blueprint(
     em_uso: Callable[[int], bool],
     unico_por: str | None = None,
     validar: Callable[[dict, object | None], dict] | None = None,
+    ocultos: Callable[[], object] | None = None,
 ) -> Blueprint:
     """Gera listar/criar/editar/excluir de um cadastro.
 
     `unico_por`: o nome só precisa ser único dentro deste atributo (ex.: função por setor).
     `validar(campos, item_atual)`: troca ids por objetos e aplica regras; devolve os campos.
+    `ocultos()`: subconsulta de ids que o usuário atual não deve ver na listagem (ou None).
     """
     bp = Blueprint(name, __name__)
     flags = {f.attr for f in spec.values() if f.kind == "bool"}
@@ -47,7 +49,10 @@ def cadastro_blueprint(
     @bp.get("")
     @require_permission("view_despesas")
     def listar():
-        return [i.to_dict() for i in db.session.scalars(select(model).order_by(model.nome))]
+        query = select(model).order_by(model.nome)
+        if ocultos and (ids := ocultos()) is not None:
+            query = query.where(model.id.not_in(ids))
+        return [i.to_dict() for i in db.session.scalars(query)]
 
     @bp.post("")
     @require_permission("manage_cadastros")
@@ -107,6 +112,7 @@ categorias_bp = cadastro_blueprint(
         "ativo": Field("ativo", kind="bool"),
     },
     _usado_em(Despesa.categoria_id),
+    ocultos=categorias_restritas,
 )
 
 formas_pagamento_bp = cadastro_blueprint(
