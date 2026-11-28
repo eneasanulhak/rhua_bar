@@ -9,6 +9,7 @@ from .extensions import db
 
 ROLES = ("admin", "gerente", "operador", "auditor")
 
+# Valores iniciais dos cadastros auxiliares (criados pela migração e por `garantir_cadastros_padrao`).
 EXPENSE_CATEGORIES = (
     "Fixos e Básicos",
     "Compras Bar e Salão",
@@ -111,14 +112,69 @@ class Faturamento(RegistradoPorMixin, db.Model):
         }
 
 
+class CadastroMixin:
+    """Campos comuns dos cadastros auxiliares. Itens em uso não são excluídos, só inativados."""
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ativo: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class Categoria(CadastroMixin, db.Model):
+    __tablename__ = "categorias"
+
+    nome: Mapped[str] = mapped_column(String(80), unique=True)
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "nome": self.nome, "ativo": self.ativo}
+
+
+class FormaPagamento(CadastroMixin, db.Model):
+    __tablename__ = "formas_pagamento"
+
+    nome: Mapped[str] = mapped_column(String(60), unique=True)
+    usa_despesas: Mapped[bool] = mapped_column(default=True)
+    usa_extras: Mapped[bool] = mapped_column(default=False)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "usaDespesas": self.usa_despesas,
+            "usaExtras": self.usa_extras,
+            "ativo": self.ativo,
+        }
+
+
+class Fornecedor(CadastroMixin, db.Model):
+    __tablename__ = "fornecedores"
+
+    nome: Mapped[str] = mapped_column(String(180), unique=True)
+    documento: Mapped[str | None] = mapped_column(String(20))
+    telefone: Mapped[str | None] = mapped_column(String(30))
+    email: Mapped[str | None] = mapped_column(String(180))
+    observacao: Mapped[str | None] = mapped_column(Text)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "nome": self.nome,
+            "documento": self.documento,
+            "telefone": self.telefone,
+            "email": self.email,
+            "observacao": self.observacao,
+            "ativo": self.ativo,
+        }
+
+
 class Despesa(RegistradoPorMixin, db.Model):
     __tablename__ = "despesas"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     descricao: Mapped[str] = mapped_column(String(255))
-    fornecedor: Mapped[str] = mapped_column(String(180))
-    categoria: Mapped[str] = mapped_column(Enum(*EXPENSE_CATEGORIES, name="expense_category"))
-    forma_pagamento: Mapped[str] = mapped_column(Enum(*PAYMENT_METHODS, name="payment_method"))
+    fornecedor_id: Mapped[int] = mapped_column(ForeignKey("fornecedores.id"), index=True)
+    categoria_id: Mapped[int] = mapped_column(ForeignKey("categorias.id"), index=True)
+    forma_pagamento_id: Mapped[int] = mapped_column(ForeignKey("formas_pagamento.id"), index=True)
     valor: Mapped[Decimal] = mapped_column(Money)
     data_emissao: Mapped[date]
     data_vencimento: Mapped[date] = mapped_column(index=True)
@@ -129,14 +185,20 @@ class Despesa(RegistradoPorMixin, db.Model):
     observacao: Mapped[str | None] = mapped_column(Text)
 
     registrado_por: Mapped[User | None] = relationship()
+    fornecedor: Mapped[Fornecedor] = relationship(lazy="joined")
+    categoria: Mapped[Categoria] = relationship(lazy="joined")
+    forma_pagamento: Mapped[FormaPagamento] = relationship(lazy="joined")
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "descricao": self.descricao,
-            "fornecedorOuFavorecido": self.fornecedor,
-            "categoria": self.categoria,
-            "formaPagamento": self.forma_pagamento,
+            "fornecedorId": self.fornecedor_id,
+            "fornecedorOuFavorecido": self.fornecedor.nome,
+            "categoriaId": self.categoria_id,
+            "categoria": self.categoria.nome,
+            "formaPagamentoId": self.forma_pagamento_id,
+            "formaPagamento": self.forma_pagamento.nome,
             "valor": _money(self.valor),
             "dataEmissao": _iso(self.data_emissao),
             "dataVencimento": _iso(self.data_vencimento),

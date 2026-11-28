@@ -7,7 +7,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     "admin": {
         "view_dashboard", "view_faturamento", "add_faturamento", "edit_faturamento", "delete_faturamento",
         "view_despesas", "add_despesas", "edit_despesas", "delete_despesas", "compensar_despesas",
-        "view_retiradas", "export_reports", "manage_users",
+        "view_retiradas", "export_reports", "manage_users", "manage_cadastros",
     },
     "gerente": {
         "view_dashboard", "view_faturamento", "add_faturamento", "edit_faturamento",

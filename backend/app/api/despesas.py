@@ -4,18 +4,21 @@ from flask import Blueprint, request
 from flask_jwt_extended import current_user
 from sqlalchemy import select
 
+from ..cadastros import obter_ou_criar_fornecedor, resolver_cadastro
 from ..extensions import db
-from ..models import EXPENSE_CATEGORIES, PAYMENT_METHODS, TRANSACTION_STATUS, Despesa
+from ..models import TRANSACTION_STATUS, Categoria, Despesa, FormaPagamento
 from ..permissions import require_permission
 from ..validation import Field, month_bounds, parse_payload
 
 bp = Blueprint("despesas", __name__)
 
+# O fornecedor vem pelo nome: se ainda não existir, é cadastrado automaticamente.
+# Categoria e forma de pagamento vêm pelo id do cadastro.
 SPEC = {
     "descricao": Field("descricao", required=True, max_len=255),
-    "fornecedorOuFavorecido": Field("fornecedor", required=True, max_len=180),
-    "categoria": Field("categoria", required=True, choices=EXPENSE_CATEGORIES),
-    "formaPagamento": Field("forma_pagamento", required=True, choices=PAYMENT_METHODS),
+    "fornecedorOuFavorecido": Field("fornecedor_nome", required=True, max_len=180),
+    "categoriaId": Field("categoria_id", kind="int", required=True),
+    "formaPagamentoId": Field("forma_pagamento_id", kind="int", required=True),
     "valor": Field("valor", kind="money", required=True),
     "dataEmissao": Field("data_emissao", kind="date", required=True),
     "dataVencimento": Field("data_vencimento", kind="date", required=True),
@@ -30,6 +33,22 @@ STATUS_SPEC = {
     "status": Field("status", required=True, choices=TRANSACTION_STATUS),
     "dataPagamento": Field("data_pagamento", kind="date"),
 }
+
+
+def _resolver_cadastros(fields: dict, atual: Despesa | None = None) -> dict:
+    """Troca o nome do fornecedor e os ids recebidos pelos cadastros correspondentes."""
+    if "fornecedor_nome" in fields:
+        fields["fornecedor"] = obter_ou_criar_fornecedor(fields.pop("fornecedor_nome"))
+    if "categoria_id" in fields:
+        fields["categoria"] = resolver_cadastro(
+            Categoria, fields.pop("categoria_id"), "categoriaId", atual and atual.categoria_id,
+        )
+    if "forma_pagamento_id" in fields:
+        fields["forma_pagamento"] = resolver_cadastro(
+            FormaPagamento, fields.pop("forma_pagamento_id"), "formaPagamentoId",
+            atual and atual.forma_pagamento_id, valido=lambda f: f.usa_despesas,
+        )
+    return fields
 
 
 def _apply_status_rules(item: Despesa) -> None:
@@ -52,7 +71,8 @@ def list_despesas():
 @bp.post("")
 @require_permission("add_despesas")
 def create_despesa():
-    item = Despesa(**parse_payload(request.get_json(silent=True), SPEC), registrado_por=current_user)
+    fields = _resolver_cadastros(parse_payload(request.get_json(silent=True), SPEC))
+    item = Despesa(**fields, registrado_por=current_user)
     _apply_status_rules(item)
     db.session.add(item)
     db.session.commit()
@@ -63,7 +83,8 @@ def create_despesa():
 @require_permission("edit_despesas")
 def update_despesa(item_id: int):
     item = db.get_or_404(Despesa, item_id, description="Despesa não encontrada.")
-    for attr, value in parse_payload(request.get_json(silent=True), SPEC, partial=True).items():
+    fields = _resolver_cadastros(parse_payload(request.get_json(silent=True), SPEC, partial=True), item)
+    for attr, value in fields.items():
         setattr(item, attr, value)
     _apply_status_rules(item)
     db.session.commit()

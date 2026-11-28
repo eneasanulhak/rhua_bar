@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   BarChart3,
+  ChevronDown,
+  FolderCog,
   FileSpreadsheet,
   Receipt,
   ShieldCheck,
@@ -12,9 +15,11 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useNotificacoesStore } from '@/stores/resources'
 import type { Permission } from '@/types'
+import { CADASTROS, type TipoCadastro } from '@/views/cadastros/config'
 
 const auth = useAuthStore()
 const notificacoes = useNotificacoesStore()
+const route = useRoute()
 
 const items = computed(() =>
   (
@@ -29,6 +34,18 @@ const items = computed(() =>
     ] as const
   ).filter((item) => auth.can(item.perm as Permission)),
 )
+
+// Menu Cadastros (só administrador): grupo com um submenu por cadastro auxiliar.
+const cadastros = (Object.keys(CADASTROS) as TipoCadastro[]).map((tipo) => ({
+  to: `cadastro-${tipo}`,
+  label: CADASTROS[tipo].titulo,
+  icon: CADASTROS[tipo].icon,
+}))
+const emCadastro = computed(() => String(route.name ?? '').startsWith('cadastro-'))
+const cadastrosAberto = ref(emCadastro.value)
+watch(emCadastro, (dentro) => {
+  if (dentro) cadastrosAberto.value = true
+})
 </script>
 
 <template>
@@ -53,6 +70,35 @@ const items = computed(() =>
           {{ item.badge }}
         </span>
       </RouterLink>
+
+      <template v-if="auth.can('manage_cadastros')">
+        <button
+          type="button"
+          class="flex shrink-0 cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-slate-100 dark:hover:bg-neutral-800/70"
+          :class="{ 'text-sand-dark dark:text-sand': emCadastro }"
+          :aria-expanded="cadastrosAberto"
+          @click="cadastrosAberto = !cadastrosAberto"
+        >
+          <FolderCog class="h-4 w-4 shrink-0" />
+          <span class="min-w-0 flex-1">
+            <span class="block text-xs font-bold">Cadastros</span>
+            <span class="hidden truncate text-[10px] opacity-60 lg:block">Tabelas auxiliares dos lançamentos</span>
+          </span>
+          <ChevronDown class="h-4 w-4 shrink-0 transition-transform" :class="{ 'rotate-180': cadastrosAberto }" />
+        </button>
+        <template v-if="cadastrosAberto">
+          <RouterLink
+            v-for="sub in cadastros"
+            :key="sub.to"
+            :to="{ name: sub.to }"
+            class="flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 transition hover:bg-slate-100 lg:ml-5 dark:hover:bg-neutral-800/70"
+            exact-active-class="!bg-black text-sand dark:!bg-sand dark:text-black"
+          >
+            <component :is="sub.icon" class="h-3.5 w-3.5 shrink-0" />
+            <span class="text-xs font-semibold">{{ sub.label }}</span>
+          </RouterLink>
+        </template>
+      </template>
     </nav>
   </aside>
 </template>

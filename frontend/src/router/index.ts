@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import type { Permission } from '@/types'
 import AppLayout from '@/layouts/AppLayout.vue'
+import { CADASTROS, type TipoCadastro } from '@/views/cadastros/config'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -66,6 +67,14 @@ const router = createRouter({
           component: () => import('@/views/EmConstrucaoView.vue'),
           meta: { permission: 'manage_users', title: 'Usuários & Permissões' },
         },
+        // Cadastros auxiliares: uma rota por tipo, todas na mesma tela genérica.
+        ...(Object.keys(CADASTROS) as TipoCadastro[]).map((tipo) => ({
+          path: `cadastros/${tipo}`,
+          name: `cadastro-${tipo}`,
+          component: () => import('@/views/cadastros/CadastroView.vue'),
+          props: { tipo },
+          meta: { permission: 'manage_cadastros' as const, title: CADASTROS[tipo].titulo },
+        })),
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

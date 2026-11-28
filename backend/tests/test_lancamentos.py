@@ -1,11 +1,6 @@
 from datetime import date, timedelta
 
 FATURAMENTO = {"data": "2026-08-01", "dinheiro": 100.5, "credito": "200.10", "pix": 0, "diferencaCaixa": -1.25}
-DESPESA = {
-    "descricao": "Bebidas", "fornecedorOuFavorecido": "Zé Distribuidora", "categoria": "Compras Bar e Salão",
-    "formaPagamento": "Boleto", "valor": 2421.56, "dataEmissao": "2026-08-06",
-    "dataVencimento": "2026-08-26", "status": "Pendente",
-}
 EXTRA = {
     "data": "2026-08-08", "nome": "Jussara", "setor": "COZINHA", "funcao": "COZINHA",
     "valorAReceber": 230, "formaPagamento": "Dinheiro", "status": "PAGO",
@@ -32,25 +27,27 @@ def test_faturamento_crud_and_month_filter(client, login):
     assert client.delete(f"/api/faturamentos/{item['id']}", headers=login("admin")).status_code == 204
 
 
-def test_auditor_is_read_only(client, login):
+def test_auditor_is_read_only(client, login, despesa):
     headers = login("auditor")
     assert client.get("/api/despesas", headers=headers).status_code == 200
-    assert client.post("/api/despesas", headers=headers, json=DESPESA).status_code == 403
+    assert client.post("/api/despesas", headers=headers, json=despesa()).status_code == 403
     assert client.post("/api/faturamentos", headers=headers, json=FATURAMENTO).status_code == 403
 
 
-def test_validation_errors(client, login):
+def test_validation_errors(client, login, despesa):
     headers = login("admin")
-    bad = {**DESPESA, "categoria": "Inexistente"}
-    assert client.post("/api/despesas", headers=headers, json=bad).status_code == 422
-    bad = {**DESPESA, "dataVencimento": "26/08/2026"}
-    assert client.post("/api/despesas", headers=headers, json=bad).status_code == 422
-    bad = {k: v for k, v in DESPESA.items() if k != "valor"}
-    assert client.post("/api/despesas", headers=headers, json=bad).status_code == 422
+    for bad in (
+        despesa(categoriaId=9999),
+        despesa(categoriaId="Compras Bar e Salão"),
+        despesa(formaPagamentoId=None),
+        despesa(dataVencimento="26/08/2026"),
+        {k: v for k, v in despesa().items() if k != "valor"},
+    ):
+        assert client.post("/api/despesas", headers=headers, json=bad).status_code == 422, bad
 
 
-def test_despesa_status_toggle(client, login):
-    item = client.post("/api/despesas", headers=login("operador"), json=DESPESA).json
+def test_despesa_status_toggle(client, login, despesa):
+    item = client.post("/api/despesas", headers=login("operador"), json=despesa()).json
     assert item["dataPagamento"] is None
 
     url = f"/api/despesas/{item['id']}/status"
@@ -71,12 +68,12 @@ def test_extras_use_despesas_permissions(client, login):
     assert client.delete(f"/api/extras/{resp.json['id']}", headers=login("admin")).status_code == 204
 
 
-def test_notificacoes(client, login):
+def test_notificacoes(client, login, despesa):
     headers = login("admin")
     today = date.today()
     for days, status in ((-3, "Pendente"), (0, "Pendente"), (5, "Pendente"), (20, "Pendente"), (-1, "Compensado")):
-        client.post("/api/despesas", headers=headers, json={
-            **DESPESA, "dataVencimento": (today + timedelta(days=days)).isoformat(), "status": status,
-        })
+        client.post("/api/despesas", headers=headers, json=despesa(
+            dataVencimento=(today + timedelta(days=days)).isoformat(), status=status,
+        ))
     types = [n["type"] for n in client.get("/api/notificacoes", headers=headers).json]
     assert types == ["urgent", "warning", "info"]

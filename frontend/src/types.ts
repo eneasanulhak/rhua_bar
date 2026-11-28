@@ -16,6 +16,7 @@ export type Permission =
   | 'view_retiradas'
   | 'export_reports'
   | 'manage_users'
+  | 'manage_cadastros'
 
 export interface User {
   id: number
@@ -29,35 +30,6 @@ export interface User {
 export interface UserInput extends Omit<User, 'id'> {
   password?: string
 }
-
-export const EXPENSE_CATEGORIES = [
-  'Fixos e Básicos',
-  'Compras Bar e Salão',
-  'Compras Cozinha e Hortifruti',
-  'Salário Funcionários',
-  'Operacional / Extras',
-  'Atrações e DJs',
-  'Manutenção e Reparos',
-  'Pagamentos e Reembolsos',
-  'Impostos e Taxas',
-  'Parcelamentos e Boletos',
-  'Retirada de Sócios',
-  'Adiantamentos',
-] as const
-export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number]
-
-export const PAYMENT_METHODS = [
-  'Dinheiro',
-  'Crédito',
-  'Débito',
-  'Pix',
-  'Voucher',
-  'Boleto',
-  'DDA',
-  'Débito em conta',
-  'Sicoob',
-] as const
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
 export type TransactionStatus = 'Compensado' | 'Pendente' | 'Atrasado'
 
@@ -87,12 +59,41 @@ export interface Faturamento {
   registradoPor: string
 }
 
+// --- Cadastros auxiliares (menu Cadastros, só administrador) ---------------
+
+export interface Categoria {
+  id: number
+  nome: string
+  ativo: boolean
+}
+
+export interface FormaPagamento {
+  id: number
+  nome: string
+  usaDespesas: boolean
+  usaExtras: boolean
+  ativo: boolean
+}
+
+export interface Fornecedor {
+  id: number
+  nome: string
+  documento: string | null
+  telefone: string | null
+  email: string | null
+  observacao: string | null
+  ativo: boolean
+}
+
 export interface Despesa {
   id: number
   descricao: string
+  fornecedorId: number
   fornecedorOuFavorecido: string
-  categoria: ExpenseCategory
-  formaPagamento: PaymentMethod
+  categoriaId: number
+  categoria: string
+  formaPagamentoId: number
+  formaPagamento: string
   valor: number
   dataEmissao: string
   dataVencimento: string
@@ -128,3 +129,9 @@ export interface Notificacao {
 
 /** Campos gerados pelo servidor não são enviados ao criar/editar. */
 export type Input<T> = Omit<T, 'id' | 'registradoPor'>
+
+/**
+ * Despesa enviada à API: categoria e forma vão pelo id; o fornecedor vai pelo nome
+ * e é cadastrado automaticamente se ainda não existir.
+ */
+export type DespesaInput = Omit<Input<Despesa>, 'fornecedorId' | 'categoria' | 'formaPagamento'>
