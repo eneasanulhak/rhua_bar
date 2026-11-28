@@ -51,7 +51,7 @@ const router = createRouter({
         {
           path: 'extras',
           name: 'extras',
-          component: () => import('@/views/EmConstrucaoView.vue'),
+          component: () => import('@/views/ExtrasView.vue'),
           meta: { permission: 'view_despesas', title: 'Pagamento de Extras' },
         },
         {
