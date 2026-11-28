@@ -103,6 +103,7 @@ categorias_bp = cadastro_blueprint(
     Categoria,
     {
         "nome": Field("nome", required=True, max_len=80),
+        "foraDoResultado": Field("fora_do_resultado", kind="bool"),
         "ativo": Field("ativo", kind="bool"),
     },
     _usado_em(Despesa.categoria_id),

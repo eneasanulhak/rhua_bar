@@ -68,7 +68,13 @@ export const CADASTROS = {
     novo: 'Nova Categoria',
     icon: Tags,
     store: () => useCategoriasStore() as unknown as CadastroStore,
-    campos: [{ ...NOME, max: 80 }],
+    campos: [
+      { ...NOME, max: 80 },
+      {
+        key: 'foraDoResultado', rotulo: 'Fora do resultado operacional', tipo: 'marcacao', coluna: true,
+        dica: 'Para retiradas de sócios, adiantamentos e similares: o DRE as mostra depois do resultado.',
+      },
+    ],
   },
   'formas-pagamento': {
     titulo: 'Formas de Pagamento',

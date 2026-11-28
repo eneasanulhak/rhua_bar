@@ -24,6 +24,8 @@ EXPENSE_CATEGORIES = (
     "Retirada de Sócios",
     "Adiantamentos",
 )
+# Categorias que o DRE mostra abaixo do resultado operacional (não são custo da operação).
+CATEGORIAS_FORA_DO_RESULTADO = ("Retirada de Sócios", "Adiantamentos")
 PAYMENT_METHODS = ("Dinheiro", "Crédito", "Débito", "Pix", "Voucher", "Boleto", "DDA", "Débito em conta", "Sicoob")
 TRANSACTION_STATUS = ("Compensado", "Pendente", "Atrasado")
 SETORES = ("COZINHA", "SEGURANÇA", "BAR", "SALÃO", "RECEPÇÃO", "LIMPEZA")
@@ -127,9 +129,11 @@ class Categoria(CadastroMixin, db.Model):
     __tablename__ = "categorias"
 
     nome: Mapped[str] = mapped_column(String(80), unique=True)
+    # Retiradas, adiantamentos…: o DRE as mostra depois do resultado operacional.
+    fora_do_resultado: Mapped[bool] = mapped_column(default=False)
 
     def to_dict(self) -> dict:
-        return {"id": self.id, "nome": self.nome, "ativo": self.ativo}
+        return {"id": self.id, "nome": self.nome, "foraDoResultado": self.fora_do_resultado, "ativo": self.ativo}
 
 
 class FormaPagamento(CadastroMixin, db.Model):

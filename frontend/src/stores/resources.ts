@@ -7,6 +7,7 @@ import type {
   Colaborador,
   Despesa,
   DespesaInput,
+  Dre,
   Extra,
   ExtraInput,
   Faturamento,
@@ -121,3 +122,25 @@ export const useFuncoesStore = defineStore('funcoes', () => ({
 export const useColaboradoresStore = defineStore('colaboradores', () => ({
   ...useCrud<Colaborador, Omit<Input<Colaborador>, 'setor' | 'funcao'>>('colaboradores'),
 }))
+
+// --- Relatórios ----------------------------------------------------------------
+
+export const useDreStore = defineStore('dre', () => {
+  const dre = ref<Dre | null>(null)
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  async function fetch(mes: string) {
+    loading.value = true
+    error.value = null
+    try {
+      dre.value = await api.get<Dre>(`/relatorios/dre${mes && mes !== 'all' ? `?mes=${mes}` : ''}`)
+    } catch (e) {
+      error.value = (e as Error).message
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return { dre, loading, error, fetch }
+})
